@@ -1,0 +1,480 @@
+{
+  "info": {
+    "_postman_id": "a1e6f8d2-4b3a-4e6b-9f0a-7c2d8e5b1f30",
+    "name": "Ecom Microservices",
+    "description": "Auth, Product, and Inventory services, organized by microservice. Import the companion environment file and select it before running requests. Run 'Auth Service > Sign In' first — it auto-saves {{jwt_token}} for every subsequent authenticated request. Order Service and Payment Service are not implemented yet, so there are no requests for them; the inventory event contract they'll eventually drive (OrderCreated, PaymentCompleted, etc.) is documented in the root README.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Auth Service",
+      "item": [
+        {
+          "name": "Sign Up",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"alice\",\n  \"email\": \"alice@example.com\",\n  \"password\": \"Str0ng!pass\"\n}"
+            },
+            "url": { "raw": "{{auth_base_url}}/auth/signup", "host": ["{{auth_base_url}}"], "path": ["auth", "signup"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Sign In",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const body = pm.response.json();",
+                  "    if (body.access_token) {",
+                  "        pm.environment.set('jwt_token', body.access_token);",
+                  "        pm.test('jwt_token saved', () => pm.expect(body.access_token).to.be.a('string'));",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/x-www-form-urlencoded" }],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                { "key": "username", "value": "alice" },
+                { "key": "password", "value": "Str0ng!pass" }
+              ]
+            },
+            "url": { "raw": "{{auth_base_url}}/auth/signin", "host": ["{{auth_base_url}}"], "path": ["auth", "signin"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Refresh Token",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}" },
+            "url": { "raw": "{{auth_base_url}}/auth/token/refresh", "host": ["{{auth_base_url}}"], "path": ["auth", "token", "refresh"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt_token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [],
+            "url": { "raw": "{{auth_base_url}}/auth/logout", "host": ["{{auth_base_url}}"], "path": ["auth", "logout"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Logout All Sessions",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt_token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [],
+            "url": { "raw": "{{auth_base_url}}/auth/logout/all", "host": ["{{auth_base_url}}"], "path": ["auth", "logout", "all"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Validate Token",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt_token}}", "type": "string" }] },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{auth_base_url}}/auth/validate", "host": ["{{auth_base_url}}"], "path": ["auth", "validate"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Current User",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt_token}}", "type": "string" }] },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{auth_base_url}}/auth/users/me", "host": ["{{auth_base_url}}"], "path": ["auth", "users", "me"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Admin Diagnostics",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt_token}}", "type": "string" }] },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{auth_base_url}}/auth/admin/diagnostics", "host": ["{{auth_base_url}}"], "path": ["auth", "admin", "diagnostics"] }
+          },
+          "response": []
+        },
+        {
+          "name": "SSO Google Login (ID token)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"token\": \"<google-id-token-from-frontend>\"\n}" },
+            "url": { "raw": "{{auth_base_url}}/auth/sso/google", "host": ["{{auth_base_url}}"], "path": ["auth", "sso", "google"] }
+          },
+          "response": []
+        },
+        {
+          "name": "SSO Generic Login",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"provider\": \"google\",\n  \"subject\": \"1234567890\",\n  \"email\": \"alice@example.com\",\n  \"display_name\": \"Alice\"\n}"
+            },
+            "url": { "raw": "{{auth_base_url}}/auth/sso/login", "host": ["{{auth_base_url}}"], "path": ["auth", "sso", "login"] }
+          },
+          "response": []
+        },
+        {
+          "name": "SSO Google Authorize (browser redirect)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{auth_base_url}}/auth/sso/google/authorize", "host": ["{{auth_base_url}}"], "path": ["auth", "sso", "google", "authorize"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Product Service",
+      "item": [
+        {
+          "name": "List Products",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{product_base_url}}/products?page=1&page_size=20",
+              "host": ["{{product_base_url}}"],
+              "path": ["products"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "page_size", "value": "20" },
+                { "key": "category", "value": "", "disabled": true },
+                { "key": "brand", "value": "", "disabled": true },
+                { "key": "sort", "value": "id", "disabled": true }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Product",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{product_base_url}}/products/{{product_id}}", "host": ["{{product_base_url}}"], "path": ["products", "{{product_id}}"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Product",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const body = pm.response.json();",
+                  "    if (body.id) { pm.environment.set('product_id', body.id); }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt_token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"product_name\": \"Ant Esports GW180 Corsa Gaming Racing Wheel\",\n  \"retail_price\": 89.99,\n  \"discount\": 10.00,\n  \"category\": \"Gaming\",\n  \"sub_category\": \"Accessories\",\n  \"brand\": \"Ant Esports\",\n  \"description\": \"Force-feedback racing wheel with pedals.\"\n}"
+            },
+            "url": { "raw": "{{product_base_url}}/products", "host": ["{{product_base_url}}"], "path": ["products"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Product",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt_token}}", "type": "string" }] },
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"retail_price\": 79.99,\n  \"discount\": 15.00\n}" },
+            "url": { "raw": "{{product_base_url}}/products/{{product_id}}", "host": ["{{product_base_url}}"], "path": ["products", "{{product_id}}"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Product",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt_token}}", "type": "string" }] },
+            "method": "DELETE",
+            "header": [],
+            "url": { "raw": "{{product_base_url}}/products/{{product_id}}", "host": ["{{product_base_url}}"], "path": ["products", "{{product_id}}"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Seed Products (Admin)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt_token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [],
+            "url": { "raw": "{{product_base_url}}/admin/products/seed", "host": ["{{product_base_url}}"], "path": ["admin", "products", "seed"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Inventory Service",
+      "item": [
+        {
+          "name": "Create Inventory",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const body = pm.response.json();",
+                  "    if (body.id) { pm.environment.set('inventory_id', body.id); }",
+                  "    if (body.product_id) { pm.environment.set('product_id', body.product_id); }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt_token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"product_id\": {{product_id}},\n  \"sku\": \"SKU-GAMING-WHEEL-001\",\n  \"warehouse_location\": \"DEFAULT\",\n  \"available_quantity\": 100,\n  \"safety_stock\": 10,\n  \"reorder_threshold\": 20\n}"
+            },
+            "url": { "raw": "{{inventory_base_url}}/inventory", "host": ["{{inventory_base_url}}"], "path": ["inventory"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Inventory by Product",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{inventory_base_url}}/inventory/{{product_id}}", "host": ["{{inventory_base_url}}"], "path": ["inventory", "{{product_id}}"] }
+          },
+          "response": []
+        },
+        {
+          "name": "List Inventory",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{inventory_base_url}}/inventory?page=1&page_size=20",
+              "host": ["{{inventory_base_url}}"],
+              "path": ["inventory"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "page_size", "value": "20" },
+                { "key": "status", "value": "IN_STOCK", "disabled": true }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Inventory",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt_token}}", "type": "string" }] },
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"reorder_threshold\": 25,\n  \"version\": 1\n}" },
+            "url": { "raw": "{{inventory_base_url}}/inventory/{{product_id}}", "host": ["{{inventory_base_url}}"], "path": ["inventory", "{{product_id}}"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Reserve Stock",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt_token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"order_id\": \"{{order_id}}\",\n  \"quantity\": 2\n}" },
+            "url": {
+              "raw": "{{inventory_base_url}}/inventory/{{product_id}}/reserve",
+              "host": ["{{inventory_base_url}}"],
+              "path": ["inventory", "{{product_id}}", "reserve"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Release Reserved Stock",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt_token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"order_id\": \"{{order_id}}\"\n}" },
+            "url": {
+              "raw": "{{inventory_base_url}}/inventory/{{product_id}}/release",
+              "host": ["{{inventory_base_url}}"],
+              "path": ["inventory", "{{product_id}}", "release"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Adjust Stock (Admin)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt_token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"delta\": -3,\n  \"reason\": \"Damaged in warehouse stocktake\"\n}" },
+            "url": {
+              "raw": "{{inventory_base_url}}/inventory/{{product_id}}/adjust",
+              "host": ["{{inventory_base_url}}"],
+              "path": ["inventory", "{{product_id}}", "adjust"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Restock Product",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt_token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"quantity\": 50\n}" },
+            "url": {
+              "raw": "{{inventory_base_url}}/inventory/{{product_id}}/restock",
+              "host": ["{{inventory_base_url}}"],
+              "path": ["inventory", "{{product_id}}", "restock"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Bulk Inventory Update (Admin)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt_token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    { \"product_id\": {{product_id}}, \"reorder_threshold\": 25 }\n  ]\n}"
+            },
+            "url": { "raw": "{{inventory_base_url}}/admin/inventory/bulk-update", "host": ["{{inventory_base_url}}"], "path": ["admin", "inventory", "bulk-update"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Inventory Health Report (Admin)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt_token}}", "type": "string" }] },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{inventory_base_url}}/admin/inventory/health-report", "host": ["{{inventory_base_url}}"], "path": ["admin", "inventory", "health-report"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Low Stock Products",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt_token}}", "type": "string" }] },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{inventory_base_url}}/inventory/reports/low-stock", "host": ["{{inventory_base_url}}"], "path": ["inventory", "reports", "low-stock"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Out of Stock Products",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt_token}}", "type": "string" }] },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{inventory_base_url}}/inventory/reports/out-of-stock",
+              "host": ["{{inventory_base_url}}"],
+              "path": ["inventory", "reports", "out-of-stock"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "API Gateway (routed examples)",
+      "item": [
+        {
+          "name": "Gateway - Sign In",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const body = pm.response.json();",
+                  "    if (body.access_token) { pm.environment.set('jwt_token', body.access_token); }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/x-www-form-urlencoded" }],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                { "key": "username", "value": "alice" },
+                { "key": "password", "value": "Str0ng!pass" }
+              ]
+            },
+            "url": { "raw": "{{base_url}}/auth/signin", "host": ["{{base_url}}"], "path": ["auth", "signin"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Gateway - List Products",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/products", "host": ["{{base_url}}"], "path": ["products"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Gateway - Get Inventory by Product",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt_token}}", "type": "string" }] },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/inventory/{{product_id}}", "host": ["{{base_url}}"], "path": ["inventory", "{{product_id}}"] }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

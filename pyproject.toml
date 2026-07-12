@@ -1,0 +1,32 @@
+[project]
+name = "ecom-platform"
+version = "1.0.0"
+description = "Production-grade ecommerce microservices platform"
+requires-python = ">=3.12"
+
+[tool.uv.workspace]
+members = ["libs/*", "services/*"]
+
+[tool.ruff]
+line-length = 140
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC"]
+ignore = [
+    "B008",  # FastAPI Depends() in defaults
+    "UP046", "UP047",  # keep Generic[] syntax — Pydantic generic models need it
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+addopts = "--import-mode=importlib"
+markers = [
+    "integration: requires docker (testcontainers)",
+    "e2e: requires full docker compose stack",
+]
+
+[dependency-groups]
+dev = [
+    "ruff",
+]

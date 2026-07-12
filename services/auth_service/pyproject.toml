@@ -1,0 +1,34 @@
+[project]
+name = "auth-service"
+version = "1.0.0"
+description = "Authentication service: email/password + Google SSO, JWT access/refresh with rotation, Redis sessions, RBAC"
+requires-python = ">=3.12"
+dependencies = [
+    "ecom-common",
+    "uvicorn[standard]>=0.32",
+    "alembic>=1.14",
+    "bcrypt>=4.2",
+    "email-validator>=2.2",
+    "google-auth>=2.36",
+    "python-multipart>=0.0.18",
+]
+
+[tool.uv.sources]
+ecom-common = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/auth_service"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "httpx>=0.28",
+    "fakeredis>=2.26",
+    "respx>=0.22",
+    "aiosqlite>=0.20",
+]
