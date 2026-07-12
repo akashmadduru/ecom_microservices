@@ -31,3 +31,15 @@ archive.zip
 .DS_Store
 
 .codspeed
+# env files & local artifacts
+
+.env.*
+.env
+.env.development
+.env.production
+.env.staging
+.env.test
+
+services/*/.env
+.venv
+uv.lock.bak
