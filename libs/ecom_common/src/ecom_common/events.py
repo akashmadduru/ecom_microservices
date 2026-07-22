@@ -33,6 +33,7 @@ class EventType:
     PRODUCT_CREATED = "ProductCreated"
     PRODUCT_UPDATED = "ProductUpdated"
     PRODUCT_DELETED = "ProductDeleted"
+    PRODUCT_VARIANT_CREATED = "ProductVariantCreated"
     INVENTORY_CREATED = "InventoryCreated"
     INVENTORY_RESERVED = "InventoryReserved"
     INVENTORY_RELEASED = "InventoryReleased"

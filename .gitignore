@@ -43,3 +43,4 @@ archive.zip
 services/*/.env
 .venv
 uv.lock.bak
+.claude
