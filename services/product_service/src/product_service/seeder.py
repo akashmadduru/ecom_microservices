@@ -13,6 +13,7 @@ skips rows it already inserted instead of duplicating them.
 
 import asyncio
 import csv
+import re
 import time
 import uuid
 from collections.abc import Iterator
@@ -53,6 +54,11 @@ def _deterministic_uniq_id(title: str, category: str, price: str | None) -> str:
     return str(uuid.uuid5(_SEED_NAMESPACE, f"{title}|{category}|{price or ''}"))
 
 
+def _slugify(value: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
+    return slug or "item"
+
+
 def _build_record(row: dict) -> dict | None:
     """Validate and normalize one CSV row into an insertable column dict, or
     None if the row is missing data required for a usable catalog entry."""
@@ -62,10 +68,14 @@ def _build_record(row: dict) -> dict | None:
 
     category = (row.get("category") or "product").strip()
     image_url = row.get("imageUrl") or None
+    uniq_id = _deterministic_uniq_id(title, category, row.get("price"))
 
     return {
-        "uniq_id": _deterministic_uniq_id(title, category, row.get("price")),
-        "product_name": title,
+        "uniq_id": uniq_id,
+        "title": title,
+        # Deterministic from uniq_id (itself content-derived), so this stays
+        # unique per row without a DB round-trip during bulk insert.
+        "slug": f"{_slugify(title)}-{uniq_id[:8]}",
         "product_url": image_url,
         "retail_price": _to_decimal(row.get("price")),
         "discount": _to_decimal(row.get("discount")),
@@ -114,7 +124,7 @@ async def _insert_batch_with_fallback(db: AsyncSession, batch: list[dict]) -> di
             except Exception as row_exc:
                 await db.rollback()
                 failed += 1
-                log.error("seed_row_failed", product_name=record.get("product_name"), error=str(row_exc))
+                log.error("seed_row_failed", title=record.get("title"), error=str(row_exc))
         return {"inserted": inserted, "skipped": skipped, "failed": failed}
 
 
