@@ -54,7 +54,7 @@ from sqlalchemy.pool import NullPool
 # product_service module gets imported (mirrors inventory_service's guard).
 os.environ.setdefault("JWT_SECRET", "integration-test-secret-not-for-prod")
 
-from product_service.api.routes import admin_router, internal_router, router  # noqa: E402
+from product_service.api.routes import admin_catalog_router, admin_router, internal_router, router  # noqa: E402
 from product_service.deps import get_current_user  # noqa: E402
 
 SERVICE_ROOT = Path(__file__).resolve().parents[2]
@@ -185,6 +185,7 @@ async def app(session_factory, redis) -> FastAPI:
     application = FastAPI()
     application.include_router(router)
     application.include_router(admin_router)
+    application.include_router(admin_catalog_router)
     application.include_router(internal_router)
     application.state.session_factory = session_factory
     application.state.redis = redis

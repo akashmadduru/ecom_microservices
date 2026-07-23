@@ -16,14 +16,13 @@ import csv
 import re
 import time
 import uuid
-from collections.abc import Iterator
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from ecom_common.logging import get_logger
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from product_service._seed_utils import chunk, insert_batch_with_fallback
 from product_service.models import Product
 from product_service.repo import ProductRepository
 
@@ -90,44 +89,6 @@ def _build_record(row: dict) -> dict | None:
     }
 
 
-def _chunk(items: list[dict], size: int) -> Iterator[list[dict]]:
-    for start in range(0, len(items), size):
-        yield items[start : start + size]
-
-
-async def _insert_batch(db: AsyncSession, batch: list[dict]) -> int:
-    """Insert one batch, skipping rows that collide on uniq_id. Returns the
-    number of rows actually inserted (Postgres omits conflicted rows from
-    the command tag, so `rowcount` already excludes them)."""
-    stmt = pg_insert(Product.__table__).values(batch).on_conflict_do_nothing(index_elements=["uniq_id"])
-    result = await db.execute(stmt)
-    await db.commit()
-    return result.rowcount or 0
-
-
-async def _insert_batch_with_fallback(db: AsyncSession, batch: list[dict]) -> dict:
-    """Try the batch as one statement; if it fails for any reason, roll back
-    and retry row-by-row so one bad record doesn't sink its whole batch."""
-    try:
-        inserted = await _insert_batch(db, batch)
-        return {"inserted": inserted, "skipped": len(batch) - inserted, "failed": 0}
-    except Exception as exc:
-        await db.rollback()
-        log.warning("seed_batch_failed_retrying_rows", batch_size=len(batch), error=str(exc))
-
-        inserted = skipped = failed = 0
-        for record in batch:
-            try:
-                row_inserted = await _insert_batch(db, [record])
-                inserted += row_inserted
-                skipped += 1 - row_inserted
-            except Exception as row_exc:
-                await db.rollback()
-                failed += 1
-                log.error("seed_row_failed", title=record.get("title"), error=str(row_exc))
-        return {"inserted": inserted, "skipped": skipped, "failed": failed}
-
-
 async def seed_from_csv(db: AsyncSession, csv_path: str, *, batch_size: int = 500) -> dict:
     start = time.monotonic()
     log.info("seed_started", csv_path=csv_path, batch_size=batch_size)
@@ -153,10 +114,12 @@ async def seed_from_csv(db: AsyncSession, csv_path: str, *, batch_size: int = 50
             continue
         valid_records.append(record)
 
-    batches = list(_chunk(valid_records, batch_size))
+    batches = list(chunk(valid_records, batch_size))
     inserted = skipped = failed = 0
     for batch_num, batch in enumerate(batches, start=1):
-        outcome = await _insert_batch_with_fallback(db, batch)
+        outcome = await insert_batch_with_fallback(
+            db, Product.__table__, batch, conflict_index_elements=["uniq_id"], row_label_field="title"
+        )
         inserted += outcome["inserted"]
         skipped += outcome["skipped"]
         failed += outcome["failed"]

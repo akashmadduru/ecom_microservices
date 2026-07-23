@@ -9,7 +9,21 @@ class Settings(BaseServiceSettings):
 
     product_cache_ttl_seconds: int = 300
     seed_csv_path: str = ""  # absolute path to products.csv; empty disables seeding
-    seed_batch_size: int = 500  # rows committed per batch during CSV seeding
+
+    seed_batch_size: int = 500  # rows committed per batch during CSV/catalog seeding
+
+    auto_seed_on_startup: bool = True
+    seed_catalog_dir: str = "seed/catalog"  # absolute path to seed/catalog/; empty disables
+
+    redis_url: str = "redis://localhost:6379"
+    kafka_bootstrap_servers: str = "localhost:29092"
+
+    jwt_secret: str = "test-jwt-secret"
+    jwt_algorithm: str = "HS256"
+    jwt_issuer: str = "ecom-auth-service"
+    jwt_audience: str = "ecom-gateway"
+
+    cors_origins: str = "http://localhost:5173"
 
 
 @lru_cache

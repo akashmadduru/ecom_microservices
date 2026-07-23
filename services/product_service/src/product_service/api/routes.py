@@ -11,6 +11,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from product_service.catalog_seeder import seed_full_catalog
 from product_service.config import get_settings
 from product_service.deps import DbDep, RedisDep, get_current_user
 from product_service.models import (
@@ -76,6 +77,7 @@ log = get_logger("product.routes")
 
 router = APIRouter(prefix="/products", tags=["products"])
 admin_router = APIRouter(prefix="/admin/products", tags=["admin"])
+admin_catalog_router = APIRouter(prefix="/admin/catalog", tags=["admin"])
 internal_router = APIRouter(prefix="/internal", tags=["internal"], include_in_schema=False)
 
 require_seller = require_roles(get_current_user, Role.SELLER)
@@ -691,6 +693,12 @@ async def seed_products(db: DbDep):
     if not settings.seed_csv_path:
         return {"message": "Seeding disabled: SEED_CSV_PATH not configured.", "seeded": 0}
     return await seed_from_csv(db, settings.seed_csv_path, batch_size=settings.seed_batch_size)
+
+
+@admin_catalog_router.post("/seed", dependencies=[Depends(require_admin)])
+async def seed_catalog(db: DbDep):
+    settings = get_settings()
+    return await seed_full_catalog(db, settings.seed_catalog_dir, batch_size=settings.seed_batch_size)
 
 
 # ---------------------------------------------------------------------------

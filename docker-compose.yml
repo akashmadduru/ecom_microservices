@@ -131,8 +131,13 @@ services:
       <<: *service-env
       SERVICE_NAME: product-service
       DATABASE_URL: postgresql+asyncpg://product_user:${PRODUCT_DB_PASSWORD:-product_user}@postgres:5432/product_db
+      # Only consumed by the manual POST /admin/products/seed endpoint; the
+      # startup auto-seed hook below uses SEED_CATALOG_DIR/seed_full_catalog
+      # instead, not the CSV path.
       SEED_CSV_PATH: /app/seed/products.csv
       SEED_BATCH_SIZE: ${SEED_BATCH_SIZE:-500}
+      AUTO_SEED_ON_STARTUP: ${AUTO_SEED_ON_STARTUP:-true}
+      SEED_CATALOG_DIR: /app/seed/catalog
     ports:
       - "8003:8003"
     networks:

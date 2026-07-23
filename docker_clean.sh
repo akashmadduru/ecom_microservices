@@ -12,6 +12,7 @@ echo "Removing all images..."
 docker rmi -f ecom_microservices-api-gateway:latest
 docker rmi -f ecom_microservices-auth-service:latest
 docker rmi -f ecom_microservices-product-service:latest
+docker rmi -f ecom_microservices-inventory-service:latest
 
 echo "Cleanup complete."   
 

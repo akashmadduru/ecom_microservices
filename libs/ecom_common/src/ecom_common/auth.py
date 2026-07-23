@@ -62,10 +62,7 @@ def build_get_current_user(get_settings):
     `app.state.redis`, rejects revoked tokens via the jti denylist.
     """
 
-    async def get_current_user(
-        request: Request,
-        credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
-    ) -> TokenPayload:
+    async def get_current_user(request: Request, credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)]) -> TokenPayload:
         if credentials is None:
             raise UnauthorizedError("Missing bearer token")
         settings = get_settings()

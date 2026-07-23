@@ -6,7 +6,8 @@ from ecom_common.logging import get_logger
 from ecom_common.redis import create_redis
 from fastapi import FastAPI
 
-from product_service.api.routes import admin_router, internal_router, router
+from product_service.api.routes import admin_catalog_router, admin_router, internal_router, router
+from product_service.catalog_seeder import seed_full_catalog
 from product_service.config import get_settings
 
 log = get_logger("product.main")
@@ -25,7 +26,17 @@ async def lifespan(app: FastAPI):
     app.state.engine = build_engine(settings.database_url)
     app.state.session_factory = build_session_factory(app.state.engine)
     app.state.redis = create_redis(settings.redis_url)
+    print('is started')
 
+    if settings.auto_seed_on_startup:
+        try:
+            async with app.state.session_factory() as session:
+                stats = await seed_full_catalog(session, settings.seed_catalog_dir, batch_size=settings.seed_batch_size)
+            log.info("catalog_seed_startup_completed", **stats)
+        except Exception:
+            log.exception("catalog_seed_startup_failed")
+
+    print('is running')
     app.state.producer = None
     if settings.kafka_bootstrap_servers:
         try:
@@ -61,9 +72,10 @@ app = create_app(
     settings=settings,
     title="E-Commerce Product Service",
     description="Product catalog: filtering, sorting, pagination, catalog events",
-    routers=[router, admin_router, internal_router],
+    routers=[router, admin_router, admin_catalog_router, internal_router],
     readiness_checks={"database": _check_db, "redis": _check_redis},
     lifespan=lifespan,
     cors_origins=settings.cors_origins.split(","),
     tags_metadata=TAGS_METADATA,
 )
+

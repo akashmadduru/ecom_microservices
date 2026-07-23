@@ -28,7 +28,7 @@ class BaseServiceSettings(BaseSettings):
     redis_url: str = "redis://localhost:6379"
     kafka_bootstrap_servers: str = "localhost:29092"
 
-    jwt_secret: str
+    jwt_secret: str = "test-jwt-secret"
     jwt_algorithm: str = "HS256"
     jwt_issuer: str = "ecom-auth-service"
     jwt_audience: str = "ecom-gateway"
