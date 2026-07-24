@@ -1,15 +1,27 @@
 # Ecom Microservices
 
-A FastAPI-based e-commerce platform, built as a `uv` workspace monorepo. Services are added phase by phase; each is independently deployable, owns its own Postgres database, and integrates with the others over Kafka events and a thin API gateway. The Vue frontend (`apps/ecom-web`) lives in the same repo but is otherwise fully independent — it talks to the backend exclusively through the API gateway and has its own CI pipeline.
+A FastAPI-based e-commerce platform, built as a `uv` workspace monorepo. Services are added phase by phase; each is independently deployable, owns its own Postgres database, and integrates with the others over Kafka events and a thin API gateway. The Vue/Nuxt frontends (`vue/`) live in the same repo but are otherwise fully independent — they talk to the backend exclusively through the API gateway (except `ops-dashboard`, which talks to Docker/Kubernetes instead) and each has its own CI pipeline.
 
 ## Repository layout
 
 ```
 ecom_microservices/
-├── apps/ecom-web/          Vue 3 + TS frontend — own package.json/package-lock.json,
-│                            independent CI, own Dockerfile
+├── vue/                     Node workspace root (npm workspaces) — own package.json/
+│   │                        package-lock.json, independent CI per member below
+│   ├── apps/
+│   │   ├── ecom-web/           Customer-facing storefront — Vue 3 + TS, own Dockerfile
+│   │   └── ecom-admin/         Internal admin console (products, inventory, brands,
+│   │                              manufacturers, tags) — Vue 3 + TS, own Dockerfile
+│   ├── packages/
+│   │   ├── core/                Shared API/client layer (axios) consumed by both apps
+│   │   └── lib/                 Shared Vue components/composables (depends on core)
+│   └── ops-dashboard/         Standalone Nuxt 4 observability dashboard for local Docker
+│                                 containers or a Kubernetes cluster (read-only by default;
+│                                 opt-in gated mutations) — self-contained, own
+│                                 package.json/package-lock.json, not part of the npm
+│                                 workspace above, has its own k8s/ RBAC manifests
 ├── python/                  All Python packages — own pyproject.toml/uv.lock (uv workspace
-│   │                        root), mirrors apps/ecom-web's self-contained shape
+│   │                        root), mirrors vue/'s self-contained shape
 │   ├── pyproject.toml
 │   ├── uv.lock
 │   ├── services/              4 FastAPI microservices, each independently deployable
@@ -22,15 +34,20 @@ ecom_microservices/
 ├── terraform/                AWS VPC + EKS stub (not yet wired to CD)
 ├── docs/                     The one documentation root for the whole platform — see docs/SDLC.md
 │   ├── services/<name>/       Per-service HLD/LLD/diagrams (convention; not all services have one yet)
-│   └── apps/<name>/           Per-frontend-app docs, same convention (e.g. apps/ecom-web/)
+│   └── apps/<name>/           Per-frontend-app docs, same convention (e.g. apps/ecom-web/, apps/ops-dashboard/)
 └── .github/workflows/        One CI pipeline per component — see "CI/CD" below
 ```
 
-Each of the 5 components above (`apps/ecom-web` + 4 services) builds, lints, and tests **independently** — a change confined to one component's directory never triggers another component's pipeline. The one exception is `python/libs/ecom_common`: since every Python service depends on it, a change there triggers all 4 Python services' pipelines (never the frontend's). Every `uv` command targets the `python/` workspace explicitly (`uv --directory python ...`, or `cd python` first) — nothing Python-related lives at the repo root.
+Each component builds, lints, and tests **independently** — a change confined to one component's directory never triggers another component's pipeline. Two exceptions: `python/libs/ecom_common` triggers all 4 Python services' pipelines (never the frontend's), since every Python service depends on it; and `vue/packages/core`/`vue/packages/lib` each trigger both `ecom-web` and `ecom-admin` (never `ops-dashboard`, which doesn't depend on them). Every `uv` command targets the `python/` workspace explicitly (`uv --directory python ...`, or `cd python` first) — nothing Python-related lives at the repo root. Similarly, `vue/apps/*` and `vue/packages/*` are an npm workspace rooted at `vue/`, while `vue/ops-dashboard` is deliberately excluded from it and can be copied out of the repo standalone.
 
 ## CI/CD
 
-GitHub Actions, one workflow file per component under `.github/workflows/` (`ci-api-gateway.yml`, `ci-auth-service.yml`, `ci-inventory-service.yml`, `ci-product-service.yml`, `ci-ecom-common.yml`, `ci-ecom-web.yml`), each triggered by its own `paths:` filter and built on top of three shared reusable workflows (`_reusable-python-lint-test.yml`, `_reusable-docker-build-push.yml`, `_reusable-node-app-ci.yml`) so the pipeline logic itself isn't duplicated 5 times. Every component: lints, runs its unit tests (`product_service` also runs its `integration`-marked tests), then builds a Docker image — pushed to `ghcr.io` only on merge to `main`, tagged `sha-<short-sha>` and `latest`. `lint-workflows.yml` runs `actionlint` over the workflow files themselves. `cd-deploy.yml` is a `workflow_dispatch`-only stub — real deployment to the EKS cluster in `terraform/eks.tf` isn't wired yet (no ECR/IAM/k8s manifests, no AWS credentials in this repo); see `docs/FutureWork.md`.
+GitHub Actions, one workflow file per component under `.github/workflows/`:
+
+- Python: `ci-api-gateway.yml`, `ci-auth-service.yml`, `ci-inventory-service.yml`, `ci-product-service.yml`, `ci-ecom-common.yml`
+- Vue/Nuxt: `ci-ecom-web.yml`, `ci-ecom-admin.yml`, `ci-core.yml`, `ci-lib.yml`, `ci-ops-dashboard.yml`
+
+Each is triggered by its own `paths:` filter and built on top of shared reusable workflows (`_reusable-python-lint-test.yml`, `_reusable-docker-build-push.yml`, `_reusable-node-app-ci.yml` for the deployable apps, `_reusable-node-package-ci.yml` for the `core`/`lib` shared packages) so the pipeline logic itself isn't duplicated per component. Every component: lints, runs its unit tests (`product_service` also runs its `integration`-marked tests), then builds a Docker image — pushed to `ghcr.io` only on merge to `main`, tagged `sha-<short-sha>` and `latest`. `lint-workflows.yml` runs `actionlint` over the workflow files themselves. `cd-deploy.yml` is a `workflow_dispatch`-only stub — real deployment to the EKS cluster in `terraform/eks.tf` isn't wired yet (no ECR/IAM/k8s manifests, no AWS credentials in this repo); see `docs/FutureWork.md`.
 
 ## SDLC — how work happens here
 
