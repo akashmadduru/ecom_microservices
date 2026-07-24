@@ -27,10 +27,19 @@ export function assertValidContainerId(id: string | undefined | null): string {
   return id
 }
 
-/** dockerode surfaces "no such container" as an error with a 404 statusCode; translate it. Rethrows anything else unchanged. */
+/**
+ * Translate a "not found" error from either backend into a 404, rethrowing
+ * anything else unchanged. The two backends report it differently:
+ *   - dockerode: an error object with a `statusCode` property.
+ *   - @kubernetes/client-node: an `ApiException` with a `code` property
+ *     (NOT `statusCode`) — missed in the initial Phase 3 pass, since a
+ *     not-found pod would otherwise fall through to a generic rethrown 500
+ *     instead of a proper 404.
+ */
 export function translateDockerNotFound(err: unknown, id: string): never {
-  const statusCode = (err as { statusCode?: number })?.statusCode
-  if (statusCode === 404) {
+  const status = (err as { statusCode?: number; code?: number })?.statusCode
+    ?? (err as { statusCode?: number; code?: number })?.code
+  if (status === 404) {
     throw createError({ statusCode: 404, statusMessage: 'Not Found', message: `No such container: ${id}` })
   }
   throw err as Error

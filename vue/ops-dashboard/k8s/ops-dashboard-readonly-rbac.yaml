@@ -1,0 +1,79 @@
+# Read-only RBAC for the ops-dashboard Kubernetes provider (Phase 3).
+#
+# WHY THIS EXISTS — READ THIS FIRST:
+#   Unlike the Docker mode, where the tecnativa/docker-socket-proxy is an
+#   ENFORCEMENT layer this app controls (it physically holds the socket and
+#   allowlists only read verbs), the Kubernetes mode has NO such enforcement
+#   layer inside the app. The app just uses whatever credentials your ambient
+#   kubeconfig gives it (KubeConfig.loadFromDefault()). The CLUSTER'S OWN RBAC is
+#   the ONLY enforcement point, and it is entirely outside this app's control.
+#
+#   This app CANNOT verify or enforce that the credentials it is handed are
+#   actually read-only. If you bind it to a cluster-admin identity, it will have
+#   cluster-admin — the app has no way to know or to stop that. This is a real,
+#   inherent difference in blast-radius control between the Docker and Kubernetes
+#   modes; it is stated here plainly, not glossed over.
+#
+#   THEREFORE: bind the identity in the kubeconfig you give the dashboard to the
+#   ClusterRole below (or a namespace-scoped Role built from the same rules), and
+#   nothing broader. These rules grant ONLY the read verbs the dashboard's
+#   read-only RuntimeProvider actually calls — no create/update/patch/delete,
+#   no exec, no scale, no pod eviction.
+#
+# SCOPE:
+#   This is a ClusterRole + ClusterRoleBinding, matching the default
+#   "all namespaces" mode (K8S_NAMESPACE unset). If you scope the dashboard to a
+#   single namespace (K8S_NAMESPACE=<ns>), you may instead use a namespaced Role
+#   + RoleBinding with the identical `rules` block, in that one namespace only.
+#
+# HOW TO APPLY (example, using a dedicated ServiceAccount):
+#   kubectl create serviceaccount ops-dashboard -n ops
+#   kubectl apply -f ops-dashboard-readonly-rbac.yaml
+#   # then generate a kubeconfig for that ServiceAccount and point the dashboard
+#   # (KUBECONFIG / ~/.kube/config) at it. In-cluster, mount the SA token instead.
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ops-dashboard-readonly
+rules:
+  # Pods -> listContainers() / inspectContainer()
+  # Services -> listNetworks()
+  # PersistentVolumeClaims -> listVolumes()
+  #
+  # Deliberately NOT included: `namespaces` (every namespace value the
+  # provider surfaces is read off `object.metadata.namespace` on the
+  # resources above, via list*ForAllNamespaces — it never calls the
+  # namespaces API itself) and the `watch` verb (this provider only ever
+  # polls via list/get; it has no informer/watch loop anywhere). Match
+  # this to the actual code (server/runtime/kubernetes-provider.ts), not
+  # the other way around — if you add a feature that needs either, add it
+  # here explicitly at that point, don't grant it speculatively.
+  - apiGroups: [""]
+    resources:
+      - pods
+      - services
+      - persistentvolumeclaims
+    verbs: ["get", "list"]
+  # The pod log subresource -> streamLogs(). `get` only: a log is fetched
+  # per-pod by name, never listed.
+  - apiGroups: [""]
+    resources:
+      - pods/log
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ops-dashboard-readonly
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ops-dashboard-readonly
+subjects:
+  # Bind to the identity your kubeconfig actually uses. This example binds a
+  # ServiceAccount named `ops-dashboard` in the `ops` namespace — change it to
+  # match yours (a User or Group works the same way).
+  - kind: ServiceAccount
+    name: ops-dashboard
+    namespace: ops

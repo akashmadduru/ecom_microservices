@@ -70,4 +70,16 @@ describe('translateDockerNotFound', () => {
     const plain = new Error('boom')
     expect(() => translateDockerNotFound(plain, 'abc')).toThrowError(plain)
   })
+
+  it('rewrites a 404 from a Kubernetes ApiException-shaped error (uses `code`, not `statusCode`)', () => {
+    const k8sErr = Object.assign(new Error('pods "x" not found'), { code: 404 })
+    expect(() => translateDockerNotFound(k8sErr, 'ns_x')).toThrowError(
+      expect.objectContaining({ statusCode: 404, message: expect.stringContaining('ns_x') }),
+    )
+  })
+
+  it('rethrows a non-404 Kubernetes-shaped `code` unchanged', () => {
+    const k8sErr = Object.assign(new Error('forbidden'), { code: 403 })
+    expect(() => translateDockerNotFound(k8sErr, 'ns_x')).toThrowError(k8sErr)
+  })
 })

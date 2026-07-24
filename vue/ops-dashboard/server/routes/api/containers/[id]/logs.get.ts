@@ -1,20 +1,30 @@
 import { Writable } from 'node:stream'
 import { getDockerClient, getRuntimeProvider } from '../../../../runtime/singleton'
+import { getOpsConfig } from '../../../../runtime/config'
 import { assertValidContainerId, translateDockerNotFound } from '../../../../runtime/container-request'
 import { acquireLogStreamSlot, releaseLogStreamSlot } from '../../../../runtime/log-stream-limiter'
 
 /**
- * Live log stream for one container, delivered as Server-Sent Events.
+ * Live log stream for one container/pod, delivered as Server-Sent Events.
+ * Backend-agnostic at this layer: `provider.streamLogs()` returns a
+ * `logStream` from EITHER `DockerProvider` (a raw docker container log
+ * stream) or `KubernetesProvider` (a plain-text pod log stream, per
+ * `runtimeMode`) — only the demux step below is backend-specific.
  *
  * Key correctness details:
- * - No TTY -> Docker multiplexes stdout/stderr with an 8-byte frame header. We
- *   MUST demux via `modem.demuxStream` or the browser sees raw framing bytes.
+ * - Docker mode: no TTY -> Docker multiplexes stdout/stderr with an 8-byte
+ *   frame header. We MUST demux via `modem.demuxStream` or the browser sees
+ *   raw framing bytes. Kubernetes mode: pod logs are already plain text with
+ *   stdout/stderr pre-merged by the API server, so `logStream` is piped
+ *   straight into a single sink with NO demuxing — demuxing it would
+ *   misinterpret the first bytes as a Docker frame header and corrupt output.
  * - A 15s heartbeat comment keeps idle connections from being reaped and lets
  *   the client distinguish "dead" from "silent".
  * - Resource lifecycle is the single most important bit: on client disconnect
  *   (the web ReadableStream's `cancel`) AND on stream end/error we clear the
- *   heartbeat and DESTROY the underlying docker stream, otherwise an abandoned
- *   tail leaks a proxy connection forever.
+ *   heartbeat and DESTROY the underlying log stream, otherwise an abandoned
+ *   tail leaks a connection (to the socket-proxy in Docker mode, to the
+ *   Kubernetes API server in kubernetes mode) forever.
  * - We return a standard web `Response` wrapping a `ReadableStream` and set the
  *   SSE headers on it directly. This is the portable, version-proof path — it
  *   sidesteps the h3 helper utilities (getQuery/createEventStream), which are
@@ -87,11 +97,11 @@ export default defineEventHandler(async (event) => {
   }
 
   const provider = getRuntimeProvider()
-  const docker = getDockerClient()
+  const { runtimeMode } = getOpsConfig()
 
-  let dockerStream: NodeJS.ReadableStream & { destroy?: () => void }
+  let logStream: NodeJS.ReadableStream & { destroy?: () => void }
   try {
-    dockerStream = await provider.streamLogs(id, { tail, follow: true, timestamps })
+    logStream = await provider.streamLogs(id, { tail, follow: true, timestamps })
   } catch (err: unknown) {
     releaseSlotOnce()
     translateDockerNotFound(err, id)
@@ -125,9 +135,18 @@ export default defineEventHandler(async (event) => {
           },
         })
 
-      // Demux the multiplexed docker stream; both sinks feed the same SSE output
-      // so stdout and stderr interleave as they arrive.
-      docker.modem.demuxStream(dockerStream, makeSink(stdoutFmt), makeSink(stderrFmt))
+      if (runtimeMode === 'kubernetes') {
+        // Kubernetes pod logs are a PLAIN text stream (no 8-byte Docker frame
+        // header), and the API already merges stdout+stderr into one stream —
+        // so pipe it straight into a single sink WITHOUT Docker demuxing, which
+        // would otherwise misread the first bytes as a frame header and corrupt
+        // the output. `end: false` so the sink's end doesn't pre-empt `finish`.
+        logStream.pipe(makeSink(stdoutFmt), { end: false })
+      } else {
+        // Demux the multiplexed docker stream; both sinks feed the same SSE
+        // output so stdout and stderr interleave as they arrive.
+        getDockerClient().modem.demuxStream(logStream, makeSink(stdoutFmt), makeSink(stderrFmt))
+      }
 
       heartbeat = setInterval(() => enqueue(': keep-alive\n\n'), 15_000)
 
@@ -142,8 +161,8 @@ export default defineEventHandler(async (event) => {
           // Already closed.
         }
       }
-      dockerStream.on('end', finish)
-      dockerStream.on('error', finish)
+      logStream.on('end', finish)
+      logStream.on('error', finish)
     },
     // Called when the client disconnects (tab closed / fetch aborted).
     cancel() {
@@ -156,7 +175,7 @@ export default defineEventHandler(async (event) => {
     cleanedUp = true
     if (heartbeat) clearInterval(heartbeat)
     // Release the proxy connection held by the tail.
-    dockerStream.destroy?.()
+    logStream.destroy?.()
     releaseSlotOnce()
   }
 

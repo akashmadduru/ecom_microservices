@@ -3,8 +3,6 @@ import type {
   ContainerDetail,
   ContainerSummary,
   HealthReport,
-  HealthServiceRollup,
-  HealthState,
   LogStreamOptions,
   NetworkSummary,
   RuntimeProvider,
@@ -17,6 +15,7 @@ import {
   parseHealthFromStatus,
   stripLeadingSlash,
 } from './parse'
+import { aggregateHealth } from './health-aggregate'
 
 const COMPOSE_SERVICE_LABEL = 'com.docker.compose.service'
 const COMPOSE_PROJECT_LABEL = 'com.docker.compose.project'
@@ -145,53 +144,7 @@ export class DockerProvider implements RuntimeProvider {
   async getHealth(): Promise<HealthReport> {
     const engineReachable = await this.ping()
     const containers = await this.listContainers()
-
-    const totals = {
-      containers: containers.length,
-      running: 0,
-      healthy: 0,
-      unhealthy: 0,
-      starting: 0,
-      noHealthcheck: 0,
-      stopped: 0,
-    }
-
-    const rollups = new Map<string, HealthServiceRollup>()
-
-    for (const c of containers) {
-      const isRunning = c.state === 'running'
-      if (isRunning) totals.running += 1
-      else totals.stopped += 1
-      this.tallyHealth(totals, c.health)
-
-      if (c.service !== null) {
-        const key = `${c.project ?? ''}/${c.service}`
-        const rollup = rollups.get(key) ?? {
-          service: c.service,
-          project: c.project,
-          total: 0,
-          running: 0,
-          healthy: 0,
-          unhealthy: 0,
-          starting: 0,
-        }
-        rollup.total += 1
-        if (isRunning) rollup.running += 1
-        if (c.health === 'healthy') rollup.healthy += 1
-        if (c.health === 'unhealthy') rollup.unhealthy += 1
-        if (c.health === 'starting') rollup.starting += 1
-        rollups.set(key, rollup)
-      }
-    }
-
-    return {
-      engineReachable,
-      totals,
-      services: [...rollups.values()].sort((a, b) =>
-        a.service.localeCompare(b.service),
-      ),
-      generatedAt: new Date().toISOString(),
-    }
+    return aggregateHealth(containers, engineReachable)
   }
 
   streamLogs(id: string, opts: LogStreamOptions): Promise<NodeJS.ReadableStream> {
@@ -205,25 +158,6 @@ export class DockerProvider implements RuntimeProvider {
       tail: opts.tail,
       timestamps: opts.timestamps,
     }) as Promise<NodeJS.ReadableStream>
-  }
-
-  private tallyHealth(
-    totals: HealthReport['totals'],
-    health: HealthState,
-  ): void {
-    switch (health) {
-      case 'healthy':
-        totals.healthy += 1
-        break
-      case 'unhealthy':
-        totals.unhealthy += 1
-        break
-      case 'starting':
-        totals.starting += 1
-        break
-      default:
-        totals.noHealthcheck += 1
-    }
   }
 
   private mapSummary(c: Docker.ContainerInfo): ContainerSummary {

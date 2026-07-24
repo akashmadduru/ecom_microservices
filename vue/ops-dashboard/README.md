@@ -7,8 +7,14 @@ live (streaming) container logs.
 Phase 1 is **read-only**. Phase 2 adds **opt-in, allowlist-gated** stop / start
 / restart controls that are **disabled by default** and off unless explicitly
 enabled at both the app and proxy layers (see "Phase 2: gated container
-controls" below). There is still no rebuild/remove/exec capability and no
-Kubernetes/EKS integration.
+controls" below). There is still no rebuild/remove/exec capability.
+
+Phase 3 adds an optional, **generic read-only Kubernetes** backend: the same
+dashboard can observe a Kubernetes cluster (any conformant cluster, EKS
+included) instead of local Docker, selected with `RUNTIME_MODE=kubernetes`. It
+is **read-only, like Phase 1 — not Phase 2**: there is deliberately no pod
+deletion, deployment scaling, or exec, and the Phase 2 mutation routes return
+`501` in Kubernetes mode. See "Phase 3: generic Kubernetes mode" below.
 
 It is deliberately self-contained: its own `package.json` / `package-lock.json`
 / `node_modules`, no dependency on the surrounding monorepo. You can copy the
@@ -105,6 +111,103 @@ POST. To enable mutations end to end, set all of `OPS_PROXY_POST=1`,
 `OPS_PROXY_ALLOW_RESTARTS=1`, plus `OPS_ALLOW_MUTATIONS=true` and a non-empty
 `OPS_MANAGED_SERVICES`.
 
+## Phase 3: generic Kubernetes mode (read-only)
+
+Set **`RUNTIME_MODE=kubernetes`** to point the dashboard at a Kubernetes cluster
+instead of Docker. The default is `docker`, so existing deployments are
+completely unaffected — only the exact string `"kubernetes"` switches backends.
+
+This mode is **generic, not EKS-specific**. It uses the standard
+`@kubernetes/client-node` ambient kubeconfig resolution
+(`KubeConfig.loadFromDefault()`: `~/.kube/config` / `KUBECONFIG` / an in-cluster
+service-account token — whatever is present), with **no AWS/EKS SDK, no IAM
+auth, nothing AWS-specific**. It works against EKS exactly the same as any other
+conformant cluster, once you have run `aws eks update-kubeconfig` yourself
+(outside this app's concern). That genericity is the point: it serves the
+"modular, anyone can use it" goal better than an EKS-specific integration would.
+
+### Namespace scope
+
+`K8S_NAMESPACE` selects the scope. **Empty/unset means all namespaces** (the
+default — parity with Docker mode seeing the whole engine). Set it to a single
+namespace to scope every pod/service/PVC listing to just that one.
+
+### How Kubernetes concepts map onto the dashboard's Docker-shaped DTOs
+
+Kubernetes has no exact analog to Docker containers/networks/volumes, so each of
+these is a **deliberate, documented approximation** (see
+`server/runtime/kubernetes-provider.ts` and `k8s-parse.ts`):
+
+| Dashboard call | Kubernetes source | Mapping notes |
+| - | - | - |
+| `listContainers` / `inspectContainer` | **Pods** | `id` = `namespace_podname` (an underscore-joined pair, since neither part can contain `_`; it round-trips through the same route-boundary id validation as a Docker id). `name` = pod name. `image` = the single container image, or all container images joined with `, ` for multi-container pods. `state` = the lowercased pod phase. `health` (see below). `service` = resolved owner/label (see below). `project` = the pod's **namespace**. `managed` = true when a `service` resolved. `networks` = the pod's IP(s) as **informational strings** (Kubernetes has no Docker-style named networks — a deliberate approximation). `createdAt` = `creationTimestamp`. |
+| `listNetworks` | **Services** | `driver` = the Service `type` (`ClusterIP`/`NodePort`/`LoadBalancer`). `scope` = namespace. `internal` = `type == ClusterIP`. `ipamSubnets` = the Service's clusterIP(s) as informational addresses (headless `None` dropped). `containers` = **empty** (resolving backing pods would be an N+1 label-selector query per Service — deliberately skipped for a list endpoint). |
+| `listVolumes` | **PersistentVolumeClaims** | `driver` = the PVC's `storageClassName`. `mountpoint` = the bound PersistentVolume name (`spec.volumeName`), empty while unbound — a PVC has no host path. `scope` = namespace. |
+| `getHealth` | **Pod readiness rollup** | Same shape as Docker's report; see the health-mapping note below. |
+| `streamLogs` | **Pod log endpoint** (`Log` class, `follow: true`) | A 2-part id (what `listContainers` emits) defaults to the pod's **first container**; a 3-part `namespace_podname_container` id addresses a specific container of a multi-container pod. Returns the same `Promise<ReadableStream>` shape as Docker. |
+| `ping` | **`GET /version`** | A cheap, un-privileged reachability probe; returns a boolean, never throws. |
+
+**Health derivation** (`derivePodHealth`) maps a pod onto Docker's
+`healthy`/`unhealthy`/`starting`/`none`:
+
+- `Running` + `Ready` condition `True` → **healthy**
+- `Running` + a container waiting with a crash/image-pull reason
+  (`CrashLoopBackOff`, `ImagePullBackOff`, …) → **unhealthy** (this is the
+  concrete signal behind a high `restartCount`)
+- `Running` + up but not yet `Ready` → **starting**
+- `Pending` → **starting**
+- `Succeeded` (ran to completion) → **none** (no ongoing health notion, like a
+  healthcheck-less container that exited 0)
+- `Failed` → **unhealthy**; `Unknown` (node lost contact) → **unhealthy**
+
+**`service` (managed) resolution** checks, in order: the pod's controller owner
+reference — a `ReplicaSet` resolves to its **Deployment** name by stripping the
+pod-template-hash suffix (no extra API call, so no extra RBAC); a `StatefulSet` /
+`DaemonSet` / `Job` / `ReplicationController` is used directly. If there is no
+usable owner reference, it falls back to labels: `app.kubernetes.io/name` first
+(the current recommended-labels standard), then the legacy `app` label.
+
+**Health rollup / the `stopped` gap:** only `state == running` (i.e. phase
+`Running`) counts as running; every other phase counts as `stopped`. So a
+**Completed** pod (`Succeeded`) tallies as `stopped` + `noHealthcheck`, while a
+**Failed** pod tallies as `stopped` + `unhealthy`. This is a defensible
+approximation of a Docker-shaped report onto a model that has no direct
+equivalent.
+
+### RBAC — guidance, not enforcement (important, blast-radius difference)
+
+Unlike Docker mode — where the socket-proxy is an enforcement layer **this app
+controls** — the Kubernetes mode has **no enforcement layer inside the app**. It
+uses whatever your ambient kubeconfig grants, and **it cannot verify or enforce
+that those credentials are actually read-only.** The **cluster's own RBAC is the
+only enforcement point**, entirely outside this app's control. This is a real,
+inherent difference in blast-radius control between the two modes, stated here
+plainly rather than glossed over: if you bind the dashboard to a broad identity,
+it will have broad access, and the app has no way to know or prevent it.
+
+So bind the identity in the kubeconfig you give the dashboard to a **read-only**
+role. A ready-to-apply `ClusterRole` + `ClusterRoleBinding` (verbs `get`/`list` on
+`pods`, `services`, `persistentvolumeclaims`, plus `get` on the `pods/log`
+subresource — matched exactly to what the provider calls, no `namespaces`, no
+`watch`, nothing else) is provided at
+[`k8s/ops-dashboard-readonly-rbac.yaml`](k8s/ops-dashboard-readonly-rbac.yaml).
+
+### Run it
+
+```bash
+cd vue/ops-dashboard
+npm install
+npm run build
+OPS_API_TOKEN=$(openssl rand -hex 32) \
+  RUNTIME_MODE=kubernetes \
+  KUBECONFIG=/path/to/readonly.kubeconfig \
+  npm start
+# K8S_NAMESPACE unset = all namespaces; set it to scope to one namespace.
+```
+
+The bearer-token auth (`OPS_API_TOKEN`), the same `/api/*` surface, and the same
+frontend all work unchanged — only the backend provider is swapped.
+
 ## Run path A — bring your own socket proxy
 
 Use this if you already run (or want to run) the proxy yourself.
@@ -158,10 +261,16 @@ it.
 | Env var | Required | Default | Meaning |
 | - | - | - | - |
 | `OPS_API_TOKEN` | yes | — (fails closed) | Operator bearer token for `/api/*`. |
-| `DOCKER_HOST` | no | `docker-socket-proxy` | Hostname of the read-only socket proxy. |
-| `DOCKER_PORT` | no | `2375` | TCP port of the read-only socket proxy. |
-| `MUTATE_DOCKER_HOST` | no | `docker-socket-proxy-mutate` | Hostname of the SEPARATE mutate-only proxy (Phase 2). |
-| `MUTATE_DOCKER_PORT` | no | `2375` | TCP port of the mutate-only proxy. |
+| `RUNTIME_MODE` | no | `docker` | Backend to observe: `docker` or `kubernetes`. Only the exact string `kubernetes` switches; anything else = `docker` (Phase 3). |
+| `K8S_NAMESPACE` | no | *(empty = all)* | Kubernetes-only: namespace scope. Empty/unset = all namespaces (Phase 3). |
+| `DOCKER_HOST` | no | `docker-socket-proxy` | Docker-only: hostname of the read-only socket proxy. |
+| `DOCKER_PORT` | no | `2375` | Docker-only: TCP port of the read-only socket proxy. |
+| `MUTATE_DOCKER_HOST` | no | `docker-socket-proxy-mutate` | Docker-only: hostname of the SEPARATE mutate-only proxy (Phase 2). |
+| `MUTATE_DOCKER_PORT` | no | `2375` | Docker-only: TCP port of the mutate-only proxy. |
+
+In `kubernetes` mode the `DOCKER_*` / `MUTATE_DOCKER_*` vars are ignored, and the
+Kubernetes API is reached via the ambient kubeconfig (`KUBECONFIG` /
+`~/.kube/config` / in-cluster service account) — see "Phase 3" above.
 
 Phase 2 mutation controls add `OPS_ALLOW_MUTATIONS`, `OPS_MANAGED_SERVICES`, and
 the compose-only `OPS_PROXY_POST` / `OPS_PROXY_ALLOW_START` /
@@ -186,15 +295,17 @@ server/
   runtime/
     types.ts                     # RuntimeProvider + DTO types (READ-ONLY interface)
     mutating-types.ts            # MutatingRuntimeProvider (Phase 2, separate interface)
-    config.ts                    # env resolution (token, both proxies, mutation gates)
+    config.ts                    # env resolution (mode, namespace, token, proxies, gates)
     token.ts                     # constant-time token comparison
-    parse.ts                     # pure mapping helpers (health/status/timestamps)
+    parse.ts                     # pure Docker mapping helpers (health/status/timestamps)
+    k8s-parse.ts                 # pure Kubernetes mapping helpers (id/health/service) (Phase 3)
     container-request.ts         # container-id validation + 404 translation (shared)
     docker-provider.ts           # DockerProvider implements RuntimeProvider via dockerode
+    kubernetes-provider.ts       # KubernetesProvider implements RuntimeProvider (Phase 3, read-only)
     docker-mutating-provider.ts  # DockerMutatingProvider (Phase 2, separate client/proxy)
-    mutation-guard.ts            # Phase 2 gate + audit-log orchestrator
+    mutation-guard.ts            # Phase 2 gate + audit-log orchestrator (501 in k8s mode)
     log-stream-limiter.ts        # caps concurrent live-log streams
-    singleton.ts                 # TWO clients/providers: read-only + mutating
+    singleton.ts                 # provider selection by RUNTIME_MODE; read-only + mutating
   routes/api/
     ping.get.ts                  # engine reachability
     health.get.ts                # aggregated health report
@@ -209,4 +320,6 @@ server/
     volumes/index.get.ts
 app/                             # Nuxt SPA (pages, components, composables)
   components/ContainerActions.vue  # gated Stop/Start/Restart + confirm (Phase 2)
+k8s/
+  ops-dashboard-readonly-rbac.yaml # read-only ClusterRole/Binding for k8s mode (Phase 3)
 ```

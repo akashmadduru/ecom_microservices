@@ -69,7 +69,19 @@ export async function runContainerMutation(
   action: MutationAction,
   id: string,
 ): Promise<{ ok: true; action: MutationAction; id: string }> {
-  const { mutationsAllowed, managedServices } = getOpsConfig()
+  const { runtimeMode, mutationsAllowed, managedServices } = getOpsConfig()
+
+  // Kubernetes mode has NO mutating surface by design (Phase 3 is read-only,
+  // Phase 2 stop/start/restart is Docker-specific). Reject before any inspect
+  // or provider construction with an explicit 501 rather than trying to drive a
+  // Docker-shaped mutating provider against a cluster.
+  if (runtimeMode === 'kubernetes') {
+    throw createError({
+      statusCode: 501,
+      statusMessage: 'Not Implemented',
+      message: 'Container mutations are not supported in kubernetes mode.',
+    })
+  }
 
   // Bound once; every audit line for this request shares this shape, varying
   // only `allowed`/`outcome`/`error` — a single edit site if the schema

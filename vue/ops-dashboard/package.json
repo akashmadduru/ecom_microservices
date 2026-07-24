@@ -16,6 +16,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@kubernetes/client-node": "^1.4.0",
     "dockerode": "^5.0.1",
     "nuxt": "^4.5.0",
     "vue": "^3.5.38"

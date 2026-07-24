@@ -1,7 +1,9 @@
 import Docker from 'dockerode'
+import { CoreV1Api, KubeConfig, Log, VersionApi } from '@kubernetes/client-node'
 import { getOpsConfig } from './config'
 import { DockerProvider } from './docker-provider'
 import { DockerMutatingProvider } from './docker-mutating-provider'
+import { KubernetesProvider } from './kubernetes-provider'
 import type { RuntimeProvider } from './types'
 import type { MutatingRuntimeProvider } from './mutating-types'
 
@@ -21,6 +23,7 @@ import type { MutatingRuntimeProvider } from './mutating-types'
 let dockerClient: Docker | null = null
 let mutatingDockerClient: Docker | null = null
 let provider: RuntimeProvider | null = null
+let k8sProvider: RuntimeProvider | null = null
 let mutatingProvider: MutatingRuntimeProvider | null = null
 
 export function getDockerClient(): Docker {
@@ -31,7 +34,39 @@ export function getDockerClient(): Docker {
   return dockerClient
 }
 
+/**
+ * Lazily construct the read-only Kubernetes provider from the AMBIENT kubeconfig
+ * (`KubeConfig.loadFromDefault()` — `~/.kube/config` / `KUBECONFIG` / in-cluster
+ * service account, whatever's present). Deliberately generic: no AWS/EKS SDK,
+ * no IAM — an operator who has run `aws eks update-kubeconfig` gets EKS for free,
+ * exactly like any other conformant cluster.
+ */
+function getKubernetesProvider(): RuntimeProvider {
+  if (!k8sProvider) {
+    const kc = new KubeConfig()
+    kc.loadFromDefault()
+    const { k8sNamespace } = getOpsConfig()
+    k8sProvider = new KubernetesProvider(
+      kc.makeApiClient(CoreV1Api),
+      new Log(kc),
+      kc.makeApiClient(VersionApi),
+      k8sNamespace,
+    )
+  }
+  return k8sProvider
+}
+
+/**
+ * The read-only provider for the process, selected by `RUNTIME_MODE`. Defaults
+ * to Docker, so existing deployments are unaffected; `kubernetes` swaps in the
+ * generic Kubernetes provider behind the SAME interface — routes/frontend are
+ * unchanged.
+ */
 export function getRuntimeProvider(): RuntimeProvider {
+  const { runtimeMode } = getOpsConfig()
+  if (runtimeMode === 'kubernetes') {
+    return getKubernetesProvider()
+  }
   if (!provider) {
     provider = new DockerProvider(getDockerClient())
   }
@@ -59,6 +94,13 @@ function getMutatingDockerClient(): Docker {
  * need reads never touch this, and this never touches the read-only proxy.
  */
 export function getMutatingProvider(): MutatingRuntimeProvider {
+  // Defense in depth: the mutating surface is Docker-only. In kubernetes mode
+  // the mutation routes are already rejected upstream (runContainerMutation),
+  // but never hand back a Docker-shaped mutating provider here either.
+  const { runtimeMode } = getOpsConfig()
+  if (runtimeMode === 'kubernetes') {
+    throw new Error('Mutating provider is not available in kubernetes mode.')
+  }
   if (!mutatingProvider) {
     mutatingProvider = new DockerMutatingProvider(getMutatingDockerClient())
   }

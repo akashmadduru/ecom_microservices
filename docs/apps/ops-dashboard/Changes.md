@@ -6,6 +6,183 @@ recent first. Related: [`Feature.md`](./Feature.md), [`DecisionLog.md`](./Decisi
 
 ---
 
+## Change set: Phase 3 build — generic read-only Kubernetes backend — 2026-07-24
+
+Built on top of Phase 1 + Phase 2 ([`Changes.md`](#change-set-phase-2-build--gated-container-mutations-stopstartrestart--2026-07-24)).
+Full feature description: [`Feature.md`](./Feature.md#phase-3-generic-read-only-kubernetes-backend).
+Related decisions: [`DecisionLog.md`](./DecisionLog.md).
+
+### Summary
+
+Added a second, alternative, strictly **read-only** backend: the dashboard can observe
+a Kubernetes cluster instead of the Docker Engine, selected at process start via
+`RUNTIME_MODE=kubernetes` (`docker` remains the default, byte-identical to before).
+Implemented as `KubernetesProvider`, implementing the **same, unmodified**
+`RuntimeProvider` interface `DockerProvider` implements — no route or frontend code
+changed to add this backend, which is exactly the payoff of that interface's
+Phase-1 design. Built on `@kubernetes/client-node`'s standard ambient kubeconfig
+resolution, deliberately generic rather than EKS-specific (no AWS SDK, no IAM code) —
+it works against any conformant cluster, EKS included, once the operator has pointed
+their own kubeconfig at it.
+
+Kubernetes mode carries no mutating surface: the Phase 2 stop/start/restart routes
+return `501 Not Implemented` when `RUNTIME_MODE=kubernetes`, checked first in
+`runContainerMutation` (before any inspect or provider construction) and independently
+re-enforced in `getMutatingProvider()`. Pods/Services/PersistentVolumeClaims are
+mapped onto the existing `ContainerSummary`/`NetworkSummary`/`VolumeSummary` DTOs as
+documented approximations (see `Feature.md`); a pod id is encoded as
+`namespace_podname` (`_` cannot appear in a DNS-1123 name, so it round-trips
+unambiguously and survives the existing id-character allowlist). The shared logs route
+branches only on whether to demux (Docker) or pipe straight through (Kubernetes,
+already-merged plain text).
+
+**This entire phase was built and shipped without ever running against a real
+Kubernetes cluster** — no kubeconfig, no kind/minikube, no live API server anywhere in
+the build environment. An explicit, informed decision (see
+[DecisionLog](./DecisionLog.md#phase-3-shipped-unverified-against-a-real-kubernetes-cluster)),
+verified only via hand-written mocks of `@kubernetes/client-node`'s published
+types/docs — the single most important caveat about this change set.
+
+A sample read-only `ClusterRole`/`ClusterRoleBinding` manifest is provided at
+`k8s/ops-dashboard-readonly-rbac.yaml` as **guidance**, not enforcement: unlike
+Docker mode's socket-proxy (an enforcement layer this app controls), Kubernetes RBAC
+is enforced entirely by the cluster, outside this app's control — see
+[DecisionLog](./DecisionLog.md#kubernetes-rbac-is-guidance-not-enforcement-an-inherent-asymmetry-with-docker-mode).
+
+### Files changed
+
+- `vue/ops-dashboard/server/runtime/kubernetes-provider.ts` — **new.**
+  `KubernetesProvider implements RuntimeProvider`, backed by `@kubernetes/client-node`'s
+  `CoreV1Api`/`Log`/`VersionApi`. Maps pods to containers, services to networks, PVCs
+  to volumes; `streamLogs` bridges the client library's callback-based `Log.log()` into
+  the `Promise<ReadableStream>` shape the interface requires via a `PassThrough`,
+  aborting the underlying request when the consumer destroys the stream.
+- `vue/ops-dashboard/server/runtime/k8s-parse.ts` — **new.** Pure Kubernetes → DTO
+  mapping helpers, mirroring the existing `parse.ts` split from `docker-provider.ts`:
+  `encodePodId`/`decodePodId` (id round-trip; `decodePodId` throws a real h3 400 on a
+  malformed id — see Review outcomes below), `derivePodHealth` (pod phase + `Ready`
+  condition + container waiting/terminated reasons → the shared `HealthState`),
+  `resolvePodService` (owner-reference chain, falling back to
+  `app.kubernetes.io/name`/`app` labels, for the Compose-service analog), `podIps`,
+  `k8sTimestampToIso`, `deploymentNameFromReplicaSet`.
+- `vue/ops-dashboard/server/runtime/health-aggregate.ts` — **new.** `aggregateHealth`/
+  `tallyHealth`, extracted from what was ~60 lines duplicated verbatim between
+  `DockerProvider.getHealth()` and the new `KubernetesProvider.getHealth()` — a code
+  review finding (see below); both providers now call this shared function, which
+  operates purely on the `ContainerSummary` DTO both already normalize to.
+- `vue/ops-dashboard/server/runtime/config.ts` — **updated.** Added `runtimeMode`
+  (parsed from `RUNTIME_MODE`; only the exact string `"kubernetes"` selects it, every
+  other value resolves to `docker`) and `k8sNamespace` (from `K8S_NAMESPACE`, empty =
+  all namespaces). Header comment updated to list the new vars.
+- `vue/ops-dashboard/server/runtime/singleton.ts` — **updated.** `getRuntimeProvider()`
+  now selects between the existing `DockerProvider` and a lazily-constructed
+  `KubernetesProvider` (built from `KubeConfig.loadFromDefault()`) based on
+  `runtimeMode`. `getMutatingProvider()` now throws if called in kubernetes mode
+  (defense in depth alongside the guard-level check in `mutation-guard.ts`) rather than
+  ever handing back a Docker-shaped mutating provider.
+- `vue/ops-dashboard/server/runtime/mutation-guard.ts` — **updated.**
+  `runContainerMutation` now checks `runtimeMode === 'kubernetes'` first, before any
+  inspect call or provider construction, and throws `501 Not Implemented` if so.
+- `vue/ops-dashboard/server/runtime/container-request.ts` — **updated.**
+  `translateDockerNotFound` now checks both dockerode's `.statusCode` property and
+  `@kubernetes/client-node`'s `ApiException`'s `.code` property for a 404 — a security
+  review finding, fixed (see below): previously a real "pod not found" fell through as
+  a generic rethrown error instead of a proper 404.
+- `vue/ops-dashboard/server/routes/api/containers/[id]/logs.get.ts` — **updated.**
+  Branches on `runtimeMode`: kubernetes mode pipes the log stream straight into the SSE
+  sink with no demuxing (pod logs are already plain text with stdout/stderr merged by
+  the API server); docker mode still demuxes via `modem.demuxStream`, unchanged. The
+  local variable that used to hold only a Docker stream was renamed from `dockerStream`
+  to `logStream` and its docstring updated to describe both branches — a code review
+  finding, fixed.
+- `vue/ops-dashboard/k8s/ops-dashboard-readonly-rbac.yaml` — **new.** Sample
+  `ClusterRole`/`ClusterRoleBinding`, guidance only, granting exactly `get`/`list` on
+  `pods`/`services`/`persistentvolumeclaims` plus `get` on `pods/log` — matched to what
+  the provider actually calls. A security review finding was fixed here: the manifest
+  originally also granted `namespaces` get/list and the `watch` verb and `pods/log:list`,
+  none of which the code uses; tightened to match exactly.
+- `vue/ops-dashboard/README.md` — **updated.** New "Phase 3: generic Kubernetes mode"
+  section: namespace scope, the Docker-concept mapping table, health-derivation rules,
+  and the RBAC guidance-not-enforcement callout. Configuration table and project-layout
+  tree updated with the new files/vars.
+- `vue/ops-dashboard/.env.example` — **updated.** Documents `RUNTIME_MODE` and
+  `K8S_NAMESPACE`, both defaulted to the pre-Phase-3 behavior (`docker`, all
+  namespaces).
+- `vue/ops-dashboard/package.json` — **updated.** Added `@kubernetes/client-node`
+  (`^1.4.0`) as a dependency.
+- `vue/ops-dashboard/test/{kubernetes-provider,k8s-parse,k8s-mutation-mode}.test.ts`
+  — **new.** Cover `KubernetesProvider`'s DTO mapping, the pure `k8s-parse.ts` helpers
+  (id encode/decode including the malformed-id 400 path, health derivation, service
+  resolution), and the parametrized stop/start/restart-returns-501-in-kubernetes-mode
+  behavior. All exercised against hand-written mocks of `@kubernetes/client-node` —
+  never a real cluster (see Summary above). Test suite grew from 114 (end of Phase 2)
+  to 116, all passing (Phase 3 added ~40 tests across these three files before the
+  review-fix pass; two more were added during the fix pass for the `.code`/400 fixes
+  and the parametrized mutation-mode test).
+
+### Breaking Changes
+
+None. `RUNTIME_MODE` defaults to `docker`; an operator who sets nothing gets exactly
+the pre-Phase-3 behavior. Kubernetes mode is entirely additive and requires explicit
+opt-in (`RUNTIME_MODE=kubernetes` plus a working kubeconfig).
+
+### Migration Steps Required
+
+None to stay on Docker. To run in Kubernetes mode: set `RUNTIME_MODE=kubernetes`,
+point `KUBECONFIG` (or `~/.kube/config`) at an identity bound to a read-only role
+(apply `k8s/ops-dashboard-readonly-rbac.yaml` or an equivalent Role/RoleBinding first),
+and optionally set `K8S_NAMESPACE` to scope to one namespace. See
+`vue/ops-dashboard/README.md`'s "Phase 3: generic Kubernetes mode" section.
+
+### Rollback Plan
+
+Unset `RUNTIME_MODE` (or set it to anything other than exactly `"kubernetes"`) to
+revert to Docker mode instantly, without redeploying — the mode check happens on every
+request via `getOpsConfig()`, not at process start only. To fully remove the Phase 3
+surface, revert this change set; `k8s/ops-dashboard-readonly-rbac.yaml` has no
+consumer inside the app and can simply be deleted from the cluster independently.
+
+### Verification performed
+
+- `npm run lint`, `npm run type-check`, `npm test` (vitest, grew from 114 to 116
+  tests), `npm run build` — all green.
+- **No live-cluster verification was performed or possible in this environment** — see
+  the Summary above and
+  [DecisionLog](./DecisionLog.md#phase-3-shipped-unverified-against-a-real-kubernetes-cluster).
+  All Kubernetes-path testing is against hand-written mocks of
+  `@kubernetes/client-node`'s published API surface.
+- **Security review:** no blockers. Verified airtight: no mutation path reachable in
+  kubernetes mode; the id-character allowlist boundary (`assertValidContainerId`)
+  protects both backends identically; no credential/kubeconfig leakage in logs or
+  error paths; supply chain clean (`@kubernetes/client-node` is the official package).
+  Two low findings, both fixed: the sample RBAC manifest granted `namespaces`/`watch`/
+  `pods/log:list` the code never uses (tightened to match exactly); malformed pod ids
+  were surfacing as a generic 500 instead of a 400 (`decodePodId` now throws a real h3
+  400, consistent with `assertValidContainerId`'s existing behavior for the Docker
+  path).
+- **Also found and fixed independently** (by the orchestrating session, prompted by
+  the Phase 3 implementer's own self-reported gap): `translateDockerNotFound` only
+  checked a `.statusCode` property (dockerode's shape) — `@kubernetes/client-node`'s
+  `ApiException` reports HTTP status via `.code` instead, so a real "pod not found" was
+  falling through as a generic rethrown error rather than a proper 404. Fixed by
+  checking both properties.
+- **Code review:** approve with comments, no blockers. One notable finding, fixed:
+  `getHealth()`/`tallyHealth()` aggregation logic was ~60 lines duplicated verbatim
+  between `DockerProvider` and `KubernetesProvider` (the original "keeps the working
+  Docker path byte-identical" justification didn't actually hold, since the logic
+  operates purely on the shared `ContainerSummary` DTO) — extracted to
+  `server/runtime/health-aggregate.ts`, consumed by both. Also fixed: a variable named
+  `dockerStream` in the shared logs route that actually held either backend's stream
+  (renamed to `logStream`, docstring updated); a comment clarifying that
+  `KubernetesProvider.mapService` reuses `encodePodId` only as a convenient
+  never-empty fallback id generator for Services, never as a real pod-id round-trip.
+- **Bundle-size note:** the client-side SPA bundle stayed ~308KB (unaffected —
+  `@kubernetes/client-node` is server-only); the Nitro server bundle grew from ~4.5MB
+  to ~20.7MB pulling in the new dependency — expected and inconsequential for a
+  server-side Node process.
+
+---
+
 ## Change set: Phase 2 build — gated container mutations (stop/start/restart) — 2026-07-24
 
 Built on top of Phase 1 ([`Changes.md`](#change-set-phase-1-build--read-only-docker-observability-dashboard--2026-07-24)).

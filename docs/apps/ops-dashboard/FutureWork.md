@@ -1,8 +1,58 @@
 # Future Work (ops-dashboard)
 
-Open items surfaced during the Phase 1 and Phase 2 builds, grouped by change set,
-most urgent first within each group. Related: [`Feature.md`](./Feature.md),
+Open items surfaced during the Phase 1, Phase 2, and Phase 3 builds, grouped by change
+set, most urgent first within each group. Related: [`Feature.md`](./Feature.md),
 [`Changes.md`](./Changes.md), [`DecisionLog.md`](./DecisionLog.md).
+
+---
+
+## Phase 3 build — generic read-only Kubernetes backend
+
+Related: [`Feature.md`](./Feature.md#phase-3-generic-read-only-kubernetes-backend),
+[`Changes.md`](./Changes.md#change-set-phase-3-build--generic-read-only-kubernetes-backend--2026-07-24),
+[`DecisionLog.md`](./DecisionLog.md#phase-3-shipped-unverified-against-a-real-kubernetes-cluster).
+
+### Backlog Items Identified During This Task
+
+| Item | Category (Perf/Debt/Feature/Security/DX) | Priority | Rationale |
+|---|---|---|---|
+| **Verify against a real Kubernetes cluster.** | Test/Debt | **High — the single most important open item from this phase** | This entire phase was built, reviewed, and shipped without ever running against a live cluster (no kubeconfig, no kind/minikube in the build environment) — an explicit, informed decision, not an oversight. Every Kubernetes interaction is exercised only via hand-written mocks of `@kubernetes/client-node`'s published contract. Treat the FIRST real run against any live cluster (kind/minikube as a first step; a real EKS cluster once `terraform/` provisions one, as the fuller test) as a verification milestone, not an afterthought — run `listContainers`/`inspectContainer`/`streamLogs`/`listNetworks`/`listVolumes` against it and record what was confirmed / what needed fixing. See [DecisionLog](./DecisionLog.md#phase-3-shipped-unverified-against-a-real-kubernetes-cluster). |
+| Kubernetes RBAC is guidance only — this app cannot enforce or verify the actual scope of the credential it's handed | Security | Medium-High (accepted, inherent — not a bug) | Unlike Docker mode's app-controlled socket-proxy, there is no enforcement layer inside this app for Kubernetes access: whatever the ambient kubeconfig grants, the app has. `k8s/ops-dashboard-readonly-rbac.yaml` is guidance for the operator to bind their own identity to, not something checked or enforced in code. A future enhancement could add a `SelfSubjectAccessReview` pre-flight check purely as an informational warning (it cannot restrict access, only report on it) if this is ever judged worth the added complexity. See [DecisionLog](./DecisionLog.md#kubernetes-rbac-is-guidance-not-enforcement-an-inherent-asymmetry-with-docker-mode). |
+| No EKS-specific integration (IAM auth, cluster discovery) | Feature | Low (deliberately out of scope) | Phase 3 is generic-Kubernetes-only by design — it relies on the operator having already run `aws eks update-kubeconfig` (or equivalent) themselves. An EKS-specific integration was evaluated and rejected in favor of genericity, consistent with this project's portability goal. See [DecisionLog](./DecisionLog.md#generic-kubernetes-provider-via-ambient-kubeconfig). Revisit only if a concrete need for in-app cluster provisioning/discovery emerges — not planned. |
+| `resolvePodService`'s ReplicaSet → Deployment name derivation strips a pod-template-hash suffix via a regex heuristic, not a real Deployment lookup | Debt | Low | Deliberate — avoids requiring RBAC on `replicasets`/`deployments` this app doesn't otherwise need (see `deploymentNameFromReplicaSet`'s own doc comment). A ReplicaSet name that doesn't match the expected `<name>-<hash>` shape falls back to the literal ReplicaSet name, which would show as a slightly-off "service" grouping in the health rollup for non-standard manifests. Not observed as a problem against any real workload yet (see the cluster-verification item above — this is exactly the kind of edge case a real cluster run would surface). |
+| `listNetworks`'s Service→pod mapping is deliberately empty (`containers: []`) | Debt/Feature | Low | Resolving backing pods per Service would require an N+1 labelSelector query per Service on a list endpoint — deliberately skipped. If a `/networks/:id` detail view is ever added (there isn't one today, for either backend), this would be the natural place to do the one extra query per-Service instead of N-per-list. |
+| No frontend/component changes were needed for Phase 3, so there's no new frontend test coverage to speak of, but the existing "no component tests" gap (carried from Phase 1/2) now also applies implicitly to whether `ContainerActions.vue` correctly stays hidden in kubernetes mode | Test/DX | Low | `GET /api/mutations-config` still reports gate state; in kubernetes mode `mutationsAllowed` is only true if `OPS_ALLOW_MUTATIONS=true` was also set, which would make the config endpoint say mutations are "allowed" even though the actual mutation routes would 501 — the frontend has no explicit kubernetes-mode awareness. Worth a small follow-up: either have `/api/mutations-config` report `allowed: false` outright in kubernetes mode, or add an explicit test confirming the UI degrades gracefully (a 501 on click, not a broken button) rather than assuming it. |
+| Kubernetes mode's `ping()` uses `GET /version`, a cheap but different reachability signal than Docker mode's `PING` | DX | Low (informational) | Not a bug — both are cheap, unauthenticated-content reachability probes appropriate to their respective backend — but worth noting for anyone debugging "the dashboard says the engine is unreachable" across the two modes, since the actual failure surface differs (proxy-down vs. API-server-down/kubeconfig-invalid). |
+
+### Deferred Technical Debt
+
+- **Phase 3 is unverified against a real cluster — this is carried forward as
+  technical debt, not just a one-time caveat, until it is closed by a real run.** See
+  the backlog row above and
+  [DecisionLog](./DecisionLog.md#phase-3-shipped-unverified-against-a-real-kubernetes-cluster).
+  Do not treat any Kubernetes-path behavior as confirmed correct until this is done.
+- **The RBAC guidance/enforcement asymmetry is a permanent architectural property of
+  using Kubernetes this way, not a bug to schedule a fix for** — mirrors the
+  equivalent Phase 2 note about the mutate-proxy's lack of per-container ACL. See
+  [DecisionLog](./DecisionLog.md#kubernetes-rbac-is-guidance-not-enforcement-an-inherent-asymmetry-with-docker-mode).
+- **No EKS-specific auth/discovery** — deliberate, not planned absent a concrete new
+  requirement. See
+  [DecisionLog](./DecisionLog.md#generic-kubernetes-provider-via-ambient-kubeconfig).
+
+### Architecture Evolution Candidates
+
+- **Real-cluster verification pass**, promoted here as the top architecture-evolution
+  candidate for this project generally, not just a backlog line item — see the
+  backlog row above. This should also be the point at which any mocked assumptions
+  that turn out wrong get corrected and this FutureWork entry updated to reflect what
+  was actually found.
+- **A `/networks/:id` and `/volumes/:id` detail view** (neither backend has one today)
+  would be a natural place to add the one-extra-query-per-Service pod resolution noted
+  above, if per-network container visibility is ever requested.
+- **Kubernetes-mode-aware `/api/mutations-config`** — have it explicitly report
+  `allowed: false` when `runtimeMode === 'kubernetes'`, regardless of
+  `OPS_ALLOW_MUTATIONS`, so the frontend gate and the actual route behavior can never
+  disagree. Small, not yet done.
 
 ---
 
@@ -66,7 +116,7 @@ Related: [`Feature.md`](./Feature.md),
 | Item | Category (Perf/Debt/Feature/Security/DX) | Priority | Rationale |
 |---|---|---|---|
 | ~~Phase 2 — mutating controls (stop/restart/rebuild), scoped to an allowlist of repo-known services~~ | Feature | **Done — shipped 2026-07-24** | Explicitly out of scope for Phase 1 by design — the user's own framing drew a hard line at read-only for that phase. Shipped as stop/start/restart only; rebuild was evaluated and explicitly rejected, not built (see [DecisionLog](./DecisionLog.md#phase-2-mutation-scope-stopstartrestart-only-rebuild-ruled-out)). Full detail: [`Feature.md`](./Feature.md#phase-2-gated-container-mutations), and the [Phase 2 build](#phase-2-build--gated-container-mutations) section above for its own follow-on backlog. |
-| Phase 3/4 — Kubernetes/EKS integration | Feature | Low (blocked on infra) | Deferred not just by scope choice but by real infra state: this repo's `terraform/` EKS setup is a bare VPC+EKS skeleton with no cluster actually provisioned yet. Revisit once a real EKS cluster exists to point a K8s-aware version of this dashboard at. |
+| ~~Phase 3/4 — Kubernetes/EKS integration~~ | Feature | **Partially done — generic read-only Kubernetes backend shipped 2026-07-24** | Shipped as a generic (not EKS-specific) read-only `KubernetesProvider`, unverified against a real cluster (see the [Phase 3 build](#phase-3-build--generic-read-only-kubernetes-backend) section above — that unverified status is itself now the top-priority open item). No EKS-specific auth/IAM integration was built, by design — see [DecisionLog](./DecisionLog.md#generic-kubernetes-provider-via-ambient-kubeconfig). This repo's `terraform/` EKS setup is still a bare VPC+EKS skeleton with no cluster provisioned, which is exactly why Phase 3 could not be verified live. Full detail: [`Feature.md`](./Feature.md#phase-3-generic-read-only-kubernetes-backend). |
 | Re-verify the three manual Nuxt/h3 workarounds on every future Nuxt upgrade | Debt | Medium | `readHeader` (auth middleware), `readQuery`, and the hand-rolled SSE `ReadableStream`/`Response` in `logs.get.ts` all exist because of apparent bugs in the bundled Nuxt 4.5/h3-v2 runtime helpers (`getRequestHeader`, `getQuery`, `createEventStream().send()`). See [DecisionLog](./DecisionLog.md#manual-workarounds-for-nuxt-h3-runtime-bugs). Action: on the next Nuxt version bump, re-test whether the framework helpers now work correctly, and delete the manual workarounds if so — don't carry them forward by default. |
 | Single static bearer token has no per-user identity or audit trail | Security/Feature | Medium | Acceptable for Phase 1's fully-read-only scope (worst case of a leaked token today is unauthorized *read* access), but would need real reconsideration — likely per-operator tokens or a lightweight identity layer — before any Phase 2 mutating action is exposed behind the same auth mechanism. |
 | No rate limiting on `/api/*` | Security/DX | Low | Not a live concern at Phase 1's read-only, single-operator-tool scale, but worth adding if the dashboard is ever exposed beyond a trusted local/loopback context (it currently isn't — see the compose file's `127.0.0.1`-only publish). |
@@ -100,10 +150,16 @@ Related: [`Feature.md`](./Feature.md),
   per-service allowlist, with a confirm() step in the UI and a structured stdout
   audit trail (no rebuild). See the [Phase 2 build](#phase-2-build--gated-container-mutations)
   section above for what shipped and what's still open from it.
-- **Phase 3/4 (Kubernetes/EKS):** would need a second `RuntimeProvider` implementation
-  (the existing interface in `server/runtime/types.ts` was written narrow enough that
-  a Kubernetes-backed implementation is at least architecturally plausible without a
-  rewrite, though this wasn't verified in depth as a concrete design target for this
-  phase) once a real EKS cluster exists in this repo's infra to target.
+- ~~**Phase 3/4 (Kubernetes/EKS):** would need a second `RuntimeProvider`
+  implementation...~~ — **done (generic backend), shipped 2026-07-24, unverified
+  against a real cluster.** The narrow, Docker-agnostic `RuntimeProvider` interface
+  hypothesized here turned out to need zero changes — `KubernetesProvider` implements
+  it unmodified. What did **not** ship: any EKS-specific auth/discovery (deliberately —
+  the generic ambient-kubeconfig approach was chosen instead, see
+  [DecisionLog](./DecisionLog.md#generic-kubernetes-provider-via-ambient-kubeconfig))
+  and any verification against a real cluster of any kind (the top-priority open item
+  from this phase — see the [Phase 3 build](#phase-3-build--generic-read-only-kubernetes-backend)
+  section above and
+  [DecisionLog](./DecisionLog.md#phase-3-shipped-unverified-against-a-real-kubernetes-cluster)).
 - **Per-operator identity/audit trail**, if Phase 2 or broader-than-loopback exposure
   ever makes the single-shared-token model insufficient — see the security item above.

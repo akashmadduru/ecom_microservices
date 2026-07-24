@@ -1,8 +1,9 @@
 /**
  * Central resolution of operator-facing environment variables: OPS_API_TOKEN,
  * DOCKER_HOST / DOCKER_PORT (read-only proxy), MUTATE_DOCKER_HOST /
- * MUTATE_DOCKER_PORT (separate mutate-only proxy), and the Phase 2 mutation
- * gates OPS_ALLOW_MUTATIONS / OPS_MANAGED_SERVICES.
+ * MUTATE_DOCKER_PORT (separate mutate-only proxy), the Phase 2 mutation gates
+ * OPS_ALLOW_MUTATIONS / OPS_MANAGED_SERVICES, and the Phase 3 backend switch
+ * RUNTIME_MODE / K8S_NAMESPACE.
  *
  * Read from `process.env` directly (not just useRuntimeConfig) so these exact
  * documented names are honored at *runtime*, even for a production
@@ -10,7 +11,30 @@
  * re-read NUXT_-prefixed vars.
  */
 
+/**
+ * Which container runtime the dashboard observes. `docker` (the default, so
+ * nothing changes for existing deployments) talks to the Docker Engine API via
+ * the read-only socket proxy; `kubernetes` talks to a Kubernetes API server via
+ * the standard `@kubernetes/client-node` ambient kubeconfig resolution. The two
+ * modes are mutually exclusive per process.
+ */
+export type RuntimeMode = 'docker' | 'kubernetes'
+
 export interface OpsConfig {
+  /**
+   * Selected runtime backend. Parsed from `RUNTIME_MODE`; ONLY the exact string
+   * `"kubernetes"` selects the Kubernetes provider — every other value (unset,
+   * empty, `"docker"`, anything else) resolves to `docker`, so the default and
+   * all pre-Phase-3 deployments keep their exact existing behavior.
+   */
+  runtimeMode: RuntimeMode
+  /**
+   * Kubernetes namespace scope (only meaningful when `runtimeMode` is
+   * `kubernetes`). Empty/unset means "all namespaces" — parity with Docker mode
+   * seeing the whole engine. A specific value scopes pod/service/PVC listings to
+   * just that namespace. Parsed from `K8S_NAMESPACE`.
+   */
+  k8sNamespace: string
   /** The expected operator bearer token. Empty string means "unset". */
   opsApiToken: string
   /** Hostname of the read-only docker-socket-proxy. */
@@ -57,6 +81,10 @@ function parsePort(raw: string | undefined, fallback: number): number {
 
 export function getOpsConfig(): OpsConfig {
   return {
+    // Strict equality with "kubernetes": anything else resolves to docker, so
+    // the default path is unchanged for every existing deployment.
+    runtimeMode: process.env.RUNTIME_MODE === 'kubernetes' ? 'kubernetes' : 'docker',
+    k8sNamespace: (process.env.K8S_NAMESPACE ?? '').trim(),
     opsApiToken: process.env.OPS_API_TOKEN ?? '',
     dockerHost: process.env.DOCKER_HOST ?? 'docker-socket-proxy',
     dockerPort: parsePort(process.env.DOCKER_PORT, 2375),

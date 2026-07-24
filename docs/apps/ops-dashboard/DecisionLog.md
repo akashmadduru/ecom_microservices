@@ -6,6 +6,208 @@ entries except to mark them superseded. Audience: engineering. Related:
 
 ---
 
+## 2026-07-24 — Phase 3 shipped unverified against a real Kubernetes cluster {#phase-3-shipped-unverified-against-a-real-kubernetes-cluster}
+
+**Context.** Phase 3 build ([`Feature.md`](./Feature.md#phase-3-generic-read-only-kubernetes-backend),
+[`Changes.md`](./Changes.md#change-set-phase-3-build--generic-read-only-kubernetes-backend--2026-07-24)).
+There is no kubeconfig, no kind/minikube, no live Kubernetes cluster anywhere in the
+environment this project is built and reviewed in. Building a Kubernetes-backed
+provider still required a concrete choice: build it anyway using the client library's
+published contract, or don't build it until a real cluster is available to test
+against.
+
+**Decision.** Build `KubernetesProvider` and ship Phase 3 now, entirely against
+`@kubernetes/client-node`'s published TypeScript types/documentation, exercised only
+via hand-written mocks in `test/{kubernetes-provider,k8s-parse,k8s-mutation-mode}
+.test.ts`. This code has **never been run against a real Kubernetes API server** —
+not in development, not in CI, not in any review step of this phase.
+
+**Why.** The user was offered three explicit options — (a) build unverified now
+against the documented client contract, (b) skip Phase 3 entirely until a cluster
+exists, or (c) stand up a local cluster (kind/minikube) first and build against that —
+and chose (a). The reasoning: `@kubernetes/client-node` is the official, actively
+maintained client library with a stable, well-documented API surface (typed request/
+response shapes for `CoreV1Api`, `Log`, `VersionApi`), so building against its
+documented contract is a materially lower-risk bet than it would be for an
+undocumented or unstable API; deferring the whole phase until a cluster happens to
+exist would block a feature whose design (see the interface-reuse decision above) is
+otherwise ready to build and review now. This was made as an informed tradeoff, not
+an oversight or a corner cut silently — it is called out explicitly in `Feature.md`,
+`Changes.md`, and here specifically so nobody discovers it after the fact.
+
+**Alternatives rejected.**
+*Skip Phase 3 entirely until a real EKS/Kubernetes cluster exists in this repo's
+infra* — rejected: the terraform EKS skeleton having no provisioned cluster yet
+(see the pre-existing Phase 1/2 FutureWork item) would then block this feature
+indefinitely with no clear timeline, when the design and implementation work was
+otherwise ready.
+*Stand up a local kind/minikube cluster first, then build and test against it* —
+rejected for this pass: heavier setup cost than the task warranted given the explicit
+three-option framing, and would still not exercise the actual EKS-shaped identity/
+RBAC/network path this dashboard is ultimately meant to run against — a local kind
+cluster verifies "does this work against *a* Kubernetes API server," which is
+necessary but not sufficient, and was judged not worth blocking on for this pass.
+
+**Consequences.** Every Kubernetes-path behavior in this phase — pod listing/
+inspection, log streaming via the `Log` class, service/PVC mapping, RBAC-driven
+error shapes, `ApiException`'s `.code`-based 404 handling — is verified only against
+mocks that encode this team's *understanding* of the client library's contract, not
+against the real API server's actual behavior. Any divergence between the mocked
+behavior and a real cluster's behavior (a subtly different error shape, an
+undocumented edge case in pagination, a `Log.log()` timing/backpressure quirk under
+real network conditions) will not surface until Phase 3 is first pointed at a live
+cluster. This is the single most important caveat about this phase and must not be
+understated in any summary of what shipped.
+
+**Revisit when.** The first real deployment against a live Kubernetes cluster —
+**treat this as a verification milestone, not an afterthought.** Concretely: run
+`listContainers`/`inspectContainer`/`streamLogs`/`listNetworks`/`listVolumes` against
+a real cluster (kind/minikube is an acceptable first step; a real EKS cluster once
+this repo's `terraform/` provisions one is the fuller test) before treating any of
+Phase 3's behavior as confirmed correct, and update this entry to record what was
+verified and what (if anything) needed fixing as a result. See
+[FutureWork.md](./FutureWork.md#phase-3-build--generic-read-only-kubernetes-backend).
+
+---
+
+## 2026-07-24 — Kubernetes RBAC is guidance, not enforcement — an inherent asymmetry with Docker mode {#kubernetes-rbac-is-guidance-not-enforcement-an-inherent-asymmetry-with-docker-mode}
+
+**Context.** Phase 3 build. Docker mode's entire read-only guarantee rests on a
+real, app-controlled enforcement layer: the `docker-socket-proxy` sidecar, which
+physically holds the socket and allowlists only read verbs (see
+[Docker access via a socket-proxy sidecar](#docker-socket-proxy-not-a-direct-socket-mount)
+above). Kubernetes mode needed an equivalent story for "how do we know this app can't
+do more than read."
+
+**Decision.** There is **no enforcement layer inside this app for Kubernetes access.**
+`KubernetesProvider` uses whatever credentials the ambient kubeconfig
+(`KubeConfig.loadFromDefault()`) hands it, with no code path that inspects, restricts,
+or verifies those credentials' actual scope. The **only** enforcement point is the
+target cluster's own RBAC, configured and controlled entirely by the operator, outside
+this app. A sample read-only `ClusterRole`/`ClusterRoleBinding` is shipped at
+`k8s/ops-dashboard-readonly-rbac.yaml`, granting exactly `get`/`list` on `pods`/
+`services`/`persistentvolumeclaims` plus `get` on `pods/log` — matched precisely to
+what the provider calls, nothing more — but this manifest is **guidance for the
+operator to bind their own identity to**, not something the app enforces, checks
+against, or can even detect is actually in effect.
+
+**Why.** This is not a design gap to close — it is how Kubernetes RBAC works. Unlike
+the Docker Engine API (a single undifferentiated socket that a sidecar proxy can sit
+in front of and filter), Kubernetes RBAC is a first-class, cluster-native concept:
+authorization is evaluated by the API server itself, per-request, based on the
+credential presented. There is no equivalent of "run a filtering proxy in front of the
+Kubernetes API" that this app could stand up and control the way it stands up
+`docker-socket-proxy` — any such proxy would just be re-implementing a subset of what
+the cluster's own RBAC already does, worse, and out of sync with the cluster's actual
+authorization model (namespaces, resource versions, admission control, etc.). The
+honest, correct design is therefore to be explicit that this app inherits whatever
+access its credential has, and to hand the operator a precise, ready-to-apply
+least-privilege manifest to bind that credential to — not to pretend an app-level
+enforcement layer exists when it structurally cannot.
+
+**Alternatives rejected.**
+*Build an in-app authorization check that inspects the kubeconfig's granted
+permissions before making calls (e.g. a `SelfSubjectAccessReview` pre-flight check)*
+— rejected: this can confirm what the credential *can* do but cannot *restrict* what
+it can do — a credential with `cluster-admin` still has `cluster-admin` no matter what
+pre-flight check this app runs before using it; it would add complexity while
+providing, at best, an informational warning, not an enforcement boundary.
+*Require the operator to run a filtering reverse-proxy in front of the Kubernetes API
+server, mirroring the Docker socket-proxy pattern* — rejected: no mature, widely-used
+equivalent of `tecnativa/docker-socket-proxy` exists for the Kubernetes API surface,
+and building one from scratch for this project would be a large, security-critical
+undertaking disproportionate to this phase's scope — RBAC is the correct, native tool
+for this job and reinventing it worse is not an improvement.
+
+**Consequences.** The blast radius of a misconfigured (over-privileged) kubeconfig in
+Kubernetes mode is entirely the operator's to control and is not bounded by anything
+this app does — this is a real, inherent difference from Docker mode's blast-radius
+story, not a bug. It is documented plainly in `Feature.md`, `README.md`, and the RBAC
+manifest's own header comment, specifically so it is never mistaken for an oversight
+that a future patch could "fix" — it cannot be fixed inside this app.
+
+**Revisit when.** Never, absent a fundamentally different Kubernetes access
+architecture (e.g. requiring a specific admission-controller-backed proxy as a hard
+dependency) that this project has no current plan to build. If the RBAC manifest's
+`rules` block ever drifts from what `kubernetes-provider.ts` actually calls (in either
+direction), fix the manifest to match the code — not the other way around, per its own
+header comment.
+
+---
+
+## 2026-07-24 — Generic Kubernetes provider via the ambient kubeconfig, reusing the unmodified `RuntimeProvider` interface {#generic-kubernetes-provider-via-ambient-kubeconfig}
+
+**Context.** Phase 3 build. Phase 1's `RuntimeProvider` interface
+(`server/runtime/types.ts`) was deliberately written narrow and Docker-agnostic even
+though, at the time, Docker was the only backend that existed — see that phase's own
+design. Phase 3 needed to decide how literally to take that narrowness, and separately
+needed to decide how to authenticate against a Kubernetes cluster: build something
+EKS-specific (this platform's actual eventual target), or something generic.
+
+**Decision.** `KubernetesProvider` implements the **exact same** `RuntimeProvider`
+interface `DockerProvider` implements — `types.ts` did not need a single line changed.
+Provider selection is a single `RUNTIME_MODE` check in `singleton.ts`; no route, no
+frontend component, and no shared helper (`container-request.ts`,
+`health-aggregate.ts`) needed to branch on which backend is active, except the one
+place that structurally must (`logs.get.ts`'s demux-vs-pipe branch, since that is a
+genuine wire-format difference between the two backends' log streams, not an
+abstraction leak). Authentication uses `@kubernetes/client-node`'s standard
+`KubeConfig.loadFromDefault()` ambient resolution (`~/.kube/config` / `KUBECONFIG` /
+in-cluster service-account token) — no AWS SDK, no IAM-specific auth code anywhere.
+
+**Why.** The interface reuse is the direct payoff of Phase 1's own design discipline:
+`RuntimeProvider` was kept free of anything Docker-specific in its method signatures
+(no `Docker.ContainerInspectInfo` leaking into the interface, no assumption baked in
+that "container" means "Docker container") specifically so a second backend would be
+*architecturally plausible without a rewrite* — a possibility explicitly flagged,
+though not committed to, in this project's own Phase 1 FutureWork notes. Phase 3 is
+the concrete confirmation that flag was correct: zero interface changes were needed.
+
+Choosing the ambient-kubeconfig approach over an EKS-specific one directly serves the
+project's standing portability goal — "modular, so anyone can use it" (see
+[stack pivot](#stack-pivot-python-fastapi--4th-workspace-member-to-standalone-nuxtnode)
+and [standalone/copy-out-able design](#standalone-copy-outable-design) above, both
+Phase 1 decisions this one is consistent with). An EKS-specific integration (AWS SDK,
+IAM auth) would only work against this platform's own eventual EKS cluster and would
+need its own credential/IAM-role story; the generic ambient-kubeconfig approach works
+against *any* conformant cluster, including EKS, the moment an operator has run
+`aws eks update-kubeconfig` themselves — a step entirely outside this app's concern,
+exactly as `DOCKER_HOST`/`DOCKER_PORT` already assume the operator has a reachable
+Docker Engine (via the socket proxy) without this app knowing anything about how that
+engine was provisioned.
+
+**Alternatives rejected.**
+*Build an EKS-specific provider using the AWS SDK for authentication (e.g.
+`aws-sdk` STS token generation for IAM-based cluster auth)* — rejected: ties the
+dashboard to AWS specifically, defeating the "copy this into any repo" goal that
+motivated the entire Phase 1 stack pivot, and adds a second, AWS-specific auth code
+path to maintain and review alongside the generic kubeconfig path, for a benefit
+(saving the operator one `aws eks update-kubeconfig` command) that doesn't justify the
+added surface area or the narrower applicability.
+*Introduce a new, broader interface (e.g. `GenericRuntimeProvider`) that both
+`DockerProvider` and `KubernetesProvider` would migrate to, anticipating future
+backends' needs* — rejected: no concrete need for anything beyond the existing
+`RuntimeProvider` surface was identified while building `KubernetesProvider`; widening
+the interface speculatively, without a second concrete requirement driving it, risked
+the same kind of premature generalization Phase 1 avoided by keeping the original
+interface narrow.
+
+**Consequences.** Adding Phase 3 touched exactly the files that needed a new backend
+implementation (`kubernetes-provider.ts`, `k8s-parse.ts`, `health-aggregate.ts` — the
+last one existing only because of a review-time extraction, not a Phase 3 design
+requirement — plus `config.ts`/`singleton.ts` for mode selection and
+`mutation-guard.ts` for the 501 rejection) and touched no route file's business logic
+and no frontend component at all. The cost of genericity: an operator wanting to point
+this at EKS must run `aws eks update-kubeconfig` themselves first — a small, explicit,
+well-understood step, not a gap in this app.
+
+**Revisit when.** If a future requirement needs the dashboard to *provision* or
+*discover* clusters itself (rather than being handed an already-configured
+kubeconfig) — that would be a materially different scope needing its own design
+discussion, not an incremental change to this decision.
+
+---
+
 ## 2026-07-24 — Second, dedicated mutate-only `docker-socket-proxy` instead of widening the read-only one {#second-dedicated-mutate-only-docker-socket-proxy-instead-of-widening-the-read-only-one}
 
 **Context.** Phase 2 build ([`Feature.md`](./Feature.md#phase-2-gated-container-mutations),
