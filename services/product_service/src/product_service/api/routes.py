@@ -239,6 +239,7 @@ async def list_products(
     category_id: int | None = Query(None, description="Taxonomy category id"),
     min_price: float | None = Query(None, description="Minimum retail price, inclusive"),
     max_price: float | None = Query(None, description="Maximum retail price, inclusive"),
+    min_rating: float | None = Query(None, description="Minimum rating (cumulative filter), inclusive"),
     sort: str = Query("id", description="One of: id, price, -price, rating, name, newest"),
 ):
     repo = ProductRepository(db)
@@ -250,6 +251,7 @@ async def list_products(
         category_id=category_id,
         min_price=min_price,
         max_price=max_price,
+        min_rating=min_rating,
         sort=sort,
     )
     items, pagination = await repo.list_paginated(params, stmt)

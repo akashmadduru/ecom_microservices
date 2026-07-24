@@ -52,6 +52,7 @@ class ProductRepository(BaseRepository[Product]):
         brand: str | None = None,
         min_price: float | None = None,
         max_price: float | None = None,
+        min_rating: float | None = None,
         brand_id: int | None = None,
         category_id: int | None = None,
         status: str | None = None,
@@ -71,6 +72,8 @@ class ProductRepository(BaseRepository[Product]):
             stmt = stmt.filter(Product.retail_price >= min_price)
         if max_price is not None:
             stmt = stmt.filter(Product.retail_price <= max_price)
+        if min_rating is not None:
+            stmt = stmt.filter(Product.rating >= min_rating)
         if brand_id is not None:
             stmt = stmt.filter(Product.brand_id == brand_id)
         if category_id is not None:
