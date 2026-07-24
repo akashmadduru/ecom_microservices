@@ -1,0 +1,50 @@
+name: product-service CI
+
+on:
+  pull_request:
+    paths:
+      - 'python/services/product_service/**'
+      - 'python/libs/ecom_common/**'
+      - 'python/pyproject.toml'
+      - 'deploy/docker/entrypoint.sh'
+      - '.github/workflows/ci-product-service.yml'
+      - '.github/workflows/_reusable-python-lint-test.yml'
+      - '.github/workflows/_reusable-docker-build-push.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'python/services/product_service/**'
+      - 'python/libs/ecom_common/**'
+      - 'python/pyproject.toml'
+      - 'deploy/docker/entrypoint.sh'
+      - '.github/workflows/ci-product-service.yml'
+      - '.github/workflows/_reusable-python-lint-test.yml'
+      - '.github/workflows/_reusable-docker-build-push.yml'
+
+concurrency:
+  group: ci-product-service-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-test:
+    uses: ./.github/workflows/_reusable-python-lint-test.yml
+    permissions:
+      contents: read
+    with:
+      working-path: services/product_service
+      package-name: product-service
+      # The only service currently exercising the `integration` pytest
+      # marker (8 test files, testcontainers-based).
+      run-integration-tests: true
+
+  docker:
+    needs: [lint-test]
+    uses: ./.github/workflows/_reusable-docker-build-push.yml
+    permissions:
+      contents: read
+      packages: write
+    with:
+      context: .
+      dockerfile-path: python/services/product_service/Dockerfile
+      image-name: ghcr.io/${{ github.repository_owner }}/ecom-microservices-product-service
+      push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}

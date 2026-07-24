@@ -40,7 +40,7 @@ archive.zip
 .env.staging
 .env.test
 
-services/*/.env
+python/services/*/.env
 .venv
 uv.lock.bak
 .claude

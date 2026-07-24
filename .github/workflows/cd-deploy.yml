@@ -1,0 +1,40 @@
+name: CD Deploy (stub)
+
+# Manual-trigger only — no push/pull_request trigger. Real deployment
+# (terraform apply / helm upgrade / kubectl rollout against the EKS cluster
+# in terraform/eks.tf) is intentionally not wired yet: no AWS credentials or
+# OIDC federation exist in this repo, and the terraform stub itself has no
+# ECR/IAM/k8s manifests to deploy against. This exists to reserve the shape
+# of the eventual CD workflow, not to perform a real deploy.
+on:
+  workflow_dispatch:
+    inputs:
+      service:
+        description: Component to deploy
+        required: true
+        type: choice
+        options:
+          - api-gateway
+          - auth-service
+          - inventory-service
+          - product-service
+          - ecom-web
+      image-tag:
+        description: 'Image tag to deploy (e.g. sha-abc123def456)'
+        required: true
+        type: string
+
+jobs:
+  deploy:
+    name: deploy (not yet implemented)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: TODO — wire real deployment
+        run: |
+          echo "Would deploy ${{ inputs.service }}:${{ inputs.image-tag }} to EKS."
+          echo "Not implemented yet — see terraform/eks.tf (VPC + EKS cluster stub only,"
+          echo "no ECR/IAM/k8s manifests/OIDC trust wired). Follow-up work:"
+          echo "  1. Fill out terraform (ECR repos, IAM roles, k8s Deployments/Services/Ingress)"
+          echo "  2. Configure GitHub OIDC -> AWS IAM role federation (no static credentials)"
+          echo "  3. Replace this step with terraform apply / helm upgrade / kubectl rollout"

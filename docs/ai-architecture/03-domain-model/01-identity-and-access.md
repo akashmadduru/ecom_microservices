@@ -16,7 +16,7 @@ and Authorization are the finer-grained domains inside it.
 ### Overview
 - **Bounded Context:** `auth_service`
 - **Maturity Tag:** Built
-- **Grounding:** `services/auth_service/` — the whole service. There is no separate
+- **Grounding:** `python/services/auth_service/` — the whole service. There is no separate
   "Identity" table; this domain is the umbrella bounded context that owns User,
   Authentication, and Authorization below.
 
@@ -56,7 +56,7 @@ from `auth_service` — see the note under the User domain below.
 ### Overview
 - **Bounded Context:** `auth_service`
 - **Maturity Tag:** Built
-- **Grounding:** `services/auth_service/src/auth_service/models.py::User`
+- **Grounding:** `python/services/auth_service/src/auth_service/models.py::User`
 
 ### Business Responsibilities
 - Persist the account record: identity, credential, role, activation state.
@@ -119,7 +119,7 @@ from `auth_service` — see the note under the User domain below.
 - The API Gateway routes `/api/v1/users/*` to a `user_service_url`
   (`http://user-service:8002`) that is distinct from `auth_service_url`
   (`http://auth-service:8001`) and does not correspond to any real service
-  (`services/api_gateway/src/api_gateway/config.py`). All real User functionality today
+  (`python/services/api_gateway/src/api_gateway/config.py`). All real User functionality today
   is actually served under `/api/v1/auth/*` by `auth_service`. This is a verified,
   additional drift beyond the 7 route-table-reserved-but-unbuilt services already known
   (cart, wishlist, orders, payments, notifications, search, reviews) — flagging it here
@@ -134,7 +134,7 @@ from `auth_service` — see the note under the User domain below.
 ### Overview
 - **Bounded Context:** `auth_service`
 - **Maturity Tag:** Built
-- **Grounding:** `services/auth_service/src/auth_service/{security.py,sessions.py,service.py,oauth_google.py,api/routes.py}`
+- **Grounding:** `python/services/auth_service/src/auth_service/{security.py,sessions.py,service.py,oauth_google.py,api/routes.py}`
 
 ### Business Responsibilities
 - Verify credentials (password or SSO ID token) and issue a JWT access/refresh pair.
@@ -203,7 +203,7 @@ from `auth_service` — see the note under the User domain below.
 
 ### Open Questions / Design Gaps
 None identified — this is a fully implemented, tested domain (see
-`services/auth_service/tests/unit/test_token_rotation.py`, cited in the root README as
+`python/services/auth_service/tests/unit/test_token_rotation.py`, cited in the root README as
 the canonical test pattern other services mirror).
 
 ---
@@ -213,7 +213,7 @@ the canonical test pattern other services mirror).
 ### Overview
 - **Bounded Context:** `ecom_common` (shared) + every service that enforces it
 - **Maturity Tag:** Built
-- **Grounding:** `libs/ecom_common/src/ecom_common/auth.py::Role`, `require_roles`; used
+- **Grounding:** `python/libs/ecom_common/src/ecom_common/auth.py::Role`, `require_roles`; used
   by `auth_service`, `product_service`, `inventory_service`, and `api_gateway`
 
 ### Business Responsibilities

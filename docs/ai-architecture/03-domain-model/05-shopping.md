@@ -18,7 +18,7 @@ code.
 - **Bounded Context:** proposed `cart_service`
 - **Maturity Tag:** Reserved-in-infra
 - **Grounding:** `EventType.CART_CREATED`, `EventType.CART_UPDATED`, `Topics.CART`
-  (`libs/ecom_common/src/ecom_common/events.py`); gateway route `/cart` →
+  (`python/libs/ecom_common/src/ecom_common/events.py`); gateway route `/cart` →
   `cart_service_url`, policy `{"*": PUBLIC}` with the code comment "guest carts allowed;
   service distinguishes guests from users" (`api_gateway/route_table.py`)
 
@@ -100,7 +100,7 @@ checkout is represented as a `CartUpdated` variant, a new event type (requiring 
 - **Bounded Context:** proposed `wishlist_service`
 - **Maturity Tag:** Reserved-in-infra
 - **Grounding:** `EventType.WISHLIST_UPDATED`, `Topics.WISHLIST`
-  (`libs/ecom_common/src/ecom_common/events.py`); gateway route `/wishlist` →
+  (`python/libs/ecom_common/src/ecom_common/events.py`); gateway route `/wishlist` →
   `wishlist_service_url`, policy `{"*": {Role.CUSTOMER}}` (`api_gateway/route_table.py`)
 
 ### Business Responsibilities (proposed)

@@ -1,0 +1,91 @@
+name: Reusable / Node app lint + typecheck + test + e2e
+
+on:
+  workflow_call:
+    inputs:
+      working-path:
+        description: Path to the frontend app (e.g. apps/ecom-web)
+        required: true
+        type: string
+
+jobs:
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-path }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: ${{ inputs.working-path }}/package-lock.json
+      - run: npm ci
+      # Deliberately NOT `npm run lint`/`npm run format` — those scripts run
+      # with --fix/--write and would silently autofix violations in the
+      # ephemeral runner and exit 0, masking real failures from ever
+      # blocking a PR. Check-only invocations here instead.
+      - name: oxlint (check only)
+        run: npx oxlint .
+      - name: eslint (check only)
+        run: npx eslint .
+      - name: prettier (check only)
+        run: npx prettier --check src/
+
+  typecheck:
+    name: typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-path }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: ${{ inputs.working-path }}/package-lock.json
+      - run: npm ci
+      - run: npm run type-check
+
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-path }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: ${{ inputs.working-path }}/package-lock.json
+      - run: npm ci
+      - run: npx vitest run
+
+  e2e:
+    name: e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-path }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: ${{ inputs.working-path }}/package-lock.json
+      - run: npm ci
+      # Chromium only in PR-blocking CI, for speed — the full
+      # chromium/firefox/webkit matrix in playwright.config.ts is not run
+      # here; there isn't enough e2e coverage yet to justify the cost.
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test --project=chromium

@@ -1,6 +1,34 @@
 # Ecom Microservices
 
-A FastAPI-based e-commerce platform, built as a `uv` workspace monorepo. Services are added phase by phase; each is independently deployable, owns its own Postgres database, and integrates with the others over Kafka events and a thin API gateway.
+A FastAPI-based e-commerce platform, built as a `uv` workspace monorepo. Services are added phase by phase; each is independently deployable, owns its own Postgres database, and integrates with the others over Kafka events and a thin API gateway. The Vue frontend (`apps/ecom-web`) lives in the same repo but is otherwise fully independent — it talks to the backend exclusively through the API gateway and has its own CI pipeline.
+
+## Repository layout
+
+```
+ecom_microservices/
+├── apps/ecom-web/          Vue 3 + TS frontend — own package.json/package-lock.json,
+│                            independent CI, own Dockerfile
+├── python/                  All Python packages — own pyproject.toml/uv.lock (uv workspace
+│   │                        root), mirrors apps/ecom-web's self-contained shape
+│   ├── pyproject.toml
+│   ├── uv.lock
+│   ├── services/              4 FastAPI microservices, each independently deployable
+│   │   ├── api_gateway/         — stateless, no DB
+│   │   ├── auth_service/        — auth_db
+│   │   ├── product_service/     — product_db
+│   │   └── inventory_service/   — inventory_db
+│   └── libs/ecom_common/      Shared Python lib (workspace path dependency, not published)
+├── deploy/                  Shared container entrypoint + Postgres bootstrap script
+├── terraform/                AWS VPC + EKS stub (not yet wired to CD)
+├── docs/services/<name>/    Per-service HLD/LLD/diagrams (convention; not all services have one yet)
+└── .github/workflows/        One CI pipeline per component — see "CI/CD" below
+```
+
+Each of the 5 components above (`apps/ecom-web` + 4 services) builds, lints, and tests **independently** — a change confined to one component's directory never triggers another component's pipeline. The one exception is `python/libs/ecom_common`: since every Python service depends on it, a change there triggers all 4 Python services' pipelines (never the frontend's). Every `uv` command targets the `python/` workspace explicitly (`uv --directory python ...`, or `cd python` first) — nothing Python-related lives at the repo root.
+
+## CI/CD
+
+GitHub Actions, one workflow file per component under `.github/workflows/` (`ci-api-gateway.yml`, `ci-auth-service.yml`, `ci-inventory-service.yml`, `ci-product-service.yml`, `ci-ecom-common.yml`, `ci-ecom-web.yml`), each triggered by its own `paths:` filter and built on top of three shared reusable workflows (`_reusable-python-lint-test.yml`, `_reusable-docker-build-push.yml`, `_reusable-node-app-ci.yml`) so the pipeline logic itself isn't duplicated 5 times. Every component: lints, runs its unit tests (`product_service` also runs its `integration`-marked tests), then builds a Docker image — pushed to `ghcr.io` only on merge to `main`, tagged `sha-<short-sha>` and `latest`. `lint-workflows.yml` runs `actionlint` over the workflow files themselves. `cd-deploy.yml` is a `workflow_dispatch`-only stub — real deployment to the EKS cluster in `terraform/eks.tf` isn't wired yet (no ECR/IAM/k8s manifests, no AWS credentials in this repo); see `docs/FutureWork.md`.
 
 ## Architecture
 
@@ -30,7 +58,7 @@ A FastAPI-based e-commerce platform, built as a `uv` workspace monorepo. Service
                └────────────┘
 ```
 
-Shared code lives in `libs/ecom_common` (a `uv` workspace package): app assembly (`bootstrap.create_app`), JWT auth (`auth.py`), DB session/engine helpers (`db.py`), the Kafka event contract and client (`events.py`, `kafka.py`), Redis helpers (`redis.py`), pagination, error handling, health/readiness, logging, and a generic repository base. Every service reuses these instead of reimplementing them.
+Shared code lives in `python/libs/ecom_common` (a `uv` workspace package): app assembly (`bootstrap.create_app`), JWT auth (`auth.py`), DB session/engine helpers (`db.py`), the Kafka event contract and client (`events.py`, `kafka.py`), Redis helpers (`redis.py`), pagination, error handling, health/readiness, logging, and a generic repository base. Every service reuses these instead of reimplementing them.
 
 **Services today**: `auth_service` (8001), `product_service` (8003), `inventory_service` (8004), `api_gateway` (8080). Order Service, Payment Service, and the rest of the catalog (cart, wishlist, notification, search, review) are **not implemented yet** — their databases, gateway routes, and Kafka event types are already reserved in the infra (`deploy/postgres/init-databases.sh`, `api_gateway/route_table.py`, `ecom_common/events.py`) so they can be added without touching what exists.
 
@@ -68,7 +96,7 @@ sequenceDiagram
     Inv->>Kafka: publish StockRestored
 ```
 
-`OrderConfirmed` is also consumed as a defensive fallback finalize trigger (covers COD-style flows where confirmation might precede payment capture) — it's a no-op if `PaymentCompleted` already finalized the sale, via the same ledger idempotency. Since no real Order/Payment producer exists yet, this contract is validated with hand-built event fixtures (see `services/inventory_service/tests/unit/test_consumers.py`), not a live end-to-end flow.
+`OrderConfirmed` is also consumed as a defensive fallback finalize trigger (covers COD-style flows where confirmation might precede payment capture) — it's a no-op if `PaymentCompleted` already finalized the sale, via the same ledger idempotency. Since no real Order/Payment producer exists yet, this contract is validated with hand-built event fixtures (see `python/services/inventory_service/tests/unit/test_consumers.py`), not a live end-to-end flow.
 
 ## Inventory lifecycle
 
@@ -92,7 +120,7 @@ Concurrency: quantity mutations (`reserve`/`release`/`finalize_sale`/`restock`/`
 
 **`inventory_reservations`** — `id`, `product_id`, `order_id`, `quantity`, `status` (`RESERVED`/`RELEASED`/`DEDUCTED`), `UNIQUE(product_id, order_id)`, `created_at`/`updated_at`.
 
-Every other service follows the same per-service-database pattern: `auth_db`/`product_db`/`inventory_db`, each with its own role, provisioned by `deploy/postgres/init-databases.sh`. Migrations are managed with Alembic, one baseline + incremental revisions per service (`services/<name>/alembic/versions/`).
+Every other service follows the same per-service-database pattern: `auth_db`/`product_db`/`inventory_db`, each with its own role, provisioned by `deploy/postgres/init-databases.sh`. Migrations are managed with Alembic, one baseline + incremental revisions per service (`python/services/<name>/alembic/versions/`).
 
 ## API documentation
 
@@ -109,22 +137,20 @@ All protected endpoints show a padlock and the Swagger "Authorize" button accept
 
 ## Postman collection
 
-Import both files from `docs/postman/`:
-- `ecom_microservices.postman_collection.json` — every documented endpoint across Auth/Product/Inventory, organized in folders per service, plus a few gateway-routed examples.
-- `ecom_microservices.postman_environment.json` — `base_url` (gateway), `auth_base_url`/`product_base_url`/`inventory_base_url` (direct per-service URLs), `jwt_token`, `user_id`, `product_id`, `inventory_id`, `order_id`.
+Import `docs/postman_collection.json` — every documented endpoint across API Gateway/Auth/Product/Inventory, read directly from each service's FastAPI routers, organized in one folder per service. It's self-contained (no separate environment file needed): built-in collection variables include `base_url`/`auth_base_url`/`product_base_url`/`inventory_base_url`, `access_token`/`refresh_token`, and per-resource ids (`product_id`, `variant_id`, `brand_id`, `category_id`, `order_id`, etc.).
 
-Select the environment, then run **Auth Service → Sign In** first — its embedded test script auto-saves the returned `access_token` into `{{jwt_token}}`, which every other authenticated request reuses automatically. `order_id` is a placeholder value since Order Service doesn't exist yet.
+Run **Auth Service → Sign In** first — its embedded test script auto-saves the returned token into `{{access_token}}`, which every other authenticated request reuses automatically. Note: the gateway's static route table maps the whole `/admin` prefix to product-service only, so inventory's `/admin/inventory/*` endpoints aren't reachable through the gateway today — call them directly against `{{inventory_base_url}}` instead, as this collection does.
 
 ## Local development
 
 ```bash
-uv sync --all-packages          # install the whole workspace
+uv --directory python sync --all-packages   # install the whole workspace
 
 make infra-up                   # postgres + redis only, for running services on the host (add `make up` below for Kafka)
 # per service, in separate terminals:
-cd services/auth_service      && uv run alembic upgrade head && uv run uvicorn auth_service.main:app --port 8001 --reload
-cd services/product_service   && uv run alembic upgrade head && uv run uvicorn product_service.main:app --port 8003 --reload
-cd services/inventory_service && uv run alembic upgrade head && uv run uvicorn inventory_service.main:app --port 8004 --reload
+cd python/services/auth_service      && uv run alembic upgrade head && uv run uvicorn auth_service.main:app --port 8001 --reload
+cd python/services/product_service   && uv run alembic upgrade head && uv run uvicorn product_service.main:app --port 8003 --reload
+cd python/services/inventory_service && uv run alembic upgrade head && uv run uvicorn inventory_service.main:app --port 8004 --reload
 
 # or, the full containerized stack:
 make up                         # docker compose up -d --build (all services + kafka + postgres + redis)
@@ -151,14 +177,14 @@ Each service also has a `make migrate-<service>` shortcut (`migrate-auth`, `migr
 ENV_FILE=.env.staging uv run uvicorn auth_service.main:app
 ```
 
-**Environment files** (`.env.example`/`.env.development`/`.env.staging`/`.env.production`/`.env.test`, at repo root for the docker-compose/platform-level vars — Postgres superuser + per-service DB passwords, `JWT_SECRET`, `ENV`, `LOG_LEVEL` — and per-service under `services/<name>/.env.example` for that service's full settings, DB URL, cache TTLs, OAuth credentials, etc.) are all committed as safe templates with placeholder or dev-only values. `.env.production` is a template only — real production secrets are never meant to live in a file at all; they're injected by whatever's actually deploying the service (Docker/Kubernetes secrets, a CI/CD pipeline, or a cloud secret manager). Actual working `.env` files (copied from the `.example` templates and filled in) are gitignored (`.env`, `services/*/.env`) and must never be committed.
+**Environment files** (`.env.example`/`.env.development`/`.env.staging`/`.env.production`/`.env.test`, at repo root for the docker-compose/platform-level vars — Postgres superuser + per-service DB passwords, `JWT_SECRET`, `ENV`, `LOG_LEVEL` — and per-service under `python/services/<name>/.env.example` for that service's full settings, DB URL, cache TTLs, OAuth credentials, etc.) are all committed as safe templates with placeholder or dev-only values. `.env.production` is a template only — real production secrets are never meant to live in a file at all; they're injected by whatever's actually deploying the service (Docker/Kubernetes secrets, a CI/CD pipeline, or a cloud secret manager). Actual working `.env` files (copied from the `.example` templates and filled in) are gitignored (`.env`, `python/services/*/.env`) and must never be committed.
 
 To get a local dev environment running:
 ```bash
 cp .env.example .env                                    # docker-compose-level vars
-cp services/auth_service/.env.example services/auth_service/.env
-cp services/product_service/.env.example services/product_service/.env
-cp services/inventory_service/.env.example services/inventory_service/.env
+cp python/services/auth_service/.env.example python/services/auth_service/.env
+cp python/services/product_service/.env.example python/services/product_service/.env
+cp python/services/inventory_service/.env.example python/services/inventory_service/.env
 ```
 The `.env.example` defaults already work out of the box for local dev without editing anything.
 
@@ -166,4 +192,4 @@ A missing/empty `KAFKA_BOOTSTRAP_SERVERS` disables event publishing/consuming fo
 
 ### Testing conventions
 
-Unit tests use `pytest` + `pytest-asyncio` (auto mode), `httpx` for API-level tests via `ASGITransport`, `fakeredis` for Redis, and an in-memory/temp-file SQLite database for the ORM layer (mirroring the pattern in `services/auth_service/tests/unit/test_token_rotation.py`). No test in `make test` requires Docker; tests marked `integration` (testcontainers) or `e2e` (full compose stack) are excluded by default and run separately via `make test-integration`.
+Unit tests use `pytest` + `pytest-asyncio` (auto mode), `httpx` for API-level tests via `ASGITransport`, `fakeredis` for Redis, and an in-memory/temp-file SQLite database for the ORM layer (mirroring the pattern in `python/services/auth_service/tests/unit/test_token_rotation.py`). No test in `make test` requires Docker; tests marked `integration` (testcontainers) or `e2e` (full compose stack) are excluded by default and run separately via `make test-integration`.

@@ -55,7 +55,7 @@ Last verified against commit: <short-hash>
 When a file's factual claims are re-checked against the repo (not merely re-read), update
 that header to the current `git rev-parse --short HEAD`. A stale header is not an error by
 itself, but a header more than a few commits behind `HEAD` on files touching `services/`,
-`libs/ecom_common/`, or `api_gateway/route_table.py` should be treated as a signal to
+`python/libs/ecom_common/`, or `api_gateway/route_table.py` should be treated as a signal to
 re-verify before trusting the content.
 
 This README's own file map must be updated whenever a file listed as "Planned, not yet

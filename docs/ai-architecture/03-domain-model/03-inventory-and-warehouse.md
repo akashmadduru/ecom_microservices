@@ -7,7 +7,7 @@ Domains: Inventory (Built), Warehouse (Conceptual-only).
 Built domain maps to `inventory_service` (port 8004, `inventory_db`).
 `inventory_service` is also the first real Kafka **consumer** in this codebase — it
 reacts to Order/Payment/Refund events that have no real producer yet, validated only
-against hand-built test fixtures (`services/inventory_service/tests/unit/test_consumers.py`),
+against hand-built test fixtures (`python/services/inventory_service/tests/unit/test_consumers.py`),
 not a live end-to-end flow.
 
 ---
@@ -17,7 +17,7 @@ not a live end-to-end flow.
 ### Overview
 - **Bounded Context:** `inventory_service`
 - **Maturity Tag:** Built
-- **Grounding:** `services/inventory_service/src/inventory_service/models.py::Inventory`,
+- **Grounding:** `python/services/inventory_service/src/inventory_service/models.py::Inventory`,
   `InventoryReservation`; `repo.py`; `consumers.py`
 
 ### Business Responsibilities

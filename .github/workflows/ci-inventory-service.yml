@@ -1,0 +1,48 @@
+name: inventory-service CI
+
+on:
+  pull_request:
+    paths:
+      - 'python/services/inventory_service/**'
+      - 'python/libs/ecom_common/**'
+      - 'python/pyproject.toml'
+      - 'deploy/docker/entrypoint.sh'
+      - '.github/workflows/ci-inventory-service.yml'
+      - '.github/workflows/_reusable-python-lint-test.yml'
+      - '.github/workflows/_reusable-docker-build-push.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'python/services/inventory_service/**'
+      - 'python/libs/ecom_common/**'
+      - 'python/pyproject.toml'
+      - 'deploy/docker/entrypoint.sh'
+      - '.github/workflows/ci-inventory-service.yml'
+      - '.github/workflows/_reusable-python-lint-test.yml'
+      - '.github/workflows/_reusable-docker-build-push.yml'
+
+concurrency:
+  group: ci-inventory-service-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-test:
+    uses: ./.github/workflows/_reusable-python-lint-test.yml
+    permissions:
+      contents: read
+    with:
+      working-path: services/inventory_service
+      package-name: inventory-service
+      run-integration-tests: false
+
+  docker:
+    needs: [lint-test]
+    uses: ./.github/workflows/_reusable-docker-build-push.yml
+    permissions:
+      contents: read
+      packages: write
+    with:
+      context: .
+      dockerfile-path: python/services/inventory_service/Dockerfile
+      image-name: ghcr.io/${{ github.repository_owner }}/ecom-microservices-inventory-service
+      push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}

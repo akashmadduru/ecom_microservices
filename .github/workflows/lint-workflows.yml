@@ -1,0 +1,22 @@
+name: Lint workflows
+
+# Broad path filter is deliberate here — this workflow's entire purpose is
+# validating the CI system itself.
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/**'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/**'
+
+jobs:
+  actionlint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: reviewdog/action-actionlint@v1
+        with:
+          fail_level: error

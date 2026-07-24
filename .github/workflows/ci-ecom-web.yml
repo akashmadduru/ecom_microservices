@@ -1,0 +1,44 @@
+name: ecom-web CI
+
+# Deliberately no python/libs/ecom_common or python/pyproject.toml in these path filters —
+# this component must never fire on a Python-only change, and vice versa.
+on:
+  pull_request:
+    paths:
+      - 'apps/ecom-web/**'
+      - '.github/workflows/ci-ecom-web.yml'
+      - '.github/workflows/_reusable-node-app-ci.yml'
+      - '.github/workflows/_reusable-docker-build-push.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'apps/ecom-web/**'
+      - '.github/workflows/ci-ecom-web.yml'
+      - '.github/workflows/_reusable-node-app-ci.yml'
+      - '.github/workflows/_reusable-docker-build-push.yml'
+
+concurrency:
+  group: ci-ecom-web-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-test:
+    uses: ./.github/workflows/_reusable-node-app-ci.yml
+    permissions:
+      contents: read
+    with:
+      working-path: apps/ecom-web
+
+  docker:
+    needs: [lint-test]
+    uses: ./.github/workflows/_reusable-docker-build-push.yml
+    permissions:
+      contents: read
+      packages: write
+    with:
+      # Own subdirectory as context, not repo root — unlike the Python
+      # services, this component has no dependency outside apps/ecom-web.
+      context: apps/ecom-web
+      dockerfile-path: apps/ecom-web/Dockerfile
+      image-name: ghcr.io/${{ github.repository_owner }}/ecom-microservices-ecom-web
+      push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}

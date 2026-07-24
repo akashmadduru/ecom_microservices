@@ -7,7 +7,7 @@ Domains: Search, Analytics, Recommendation, Reporting.
 ## Deviation note on Search's maturity tag
 
 This cluster is grouped in the domain catalog as "all Conceptual-only," but that does
-not hold up against the actual routing table: `services/api_gateway/src/api_gateway/route_table.py`
+not hold up against the actual routing table: `python/services/api_gateway/src/api_gateway/route_table.py`
 declares a live `/search` route (`upstream_name="search-service"`, policy
 `{"*": PUBLIC}`), and `search-service` is one of the 7 route-table-reserved-but-unbuilt
 upstreams already identified as pre-existing drift (cart, wishlist, orders, payments,

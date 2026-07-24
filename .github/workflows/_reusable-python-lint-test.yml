@@ -1,0 +1,71 @@
+name: Reusable / Python lint + test
+
+on:
+  workflow_call:
+    inputs:
+      working-path:
+        description: Path to the component, relative to python/ (e.g. services/product_service)
+        required: true
+        type: string
+      package-name:
+        description: The uv workspace --package name (e.g. product-service, ecom-common)
+        required: true
+        type: string
+      run-integration-tests:
+        description: Whether to run pytest -m integration in addition to the fast unit suite
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: python
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Sync (locked — fails on lockfile/pyproject drift)
+        run: uv sync --package "${{ inputs.package-name }}" --locked
+      - name: Ruff check
+        run: uv run ruff check "${{ inputs.working-path }}"
+
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: python
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Sync (locked — fails on lockfile/pyproject drift)
+        run: uv sync --package "${{ inputs.package-name }}" --locked
+      - name: Unit tests
+        run: uv run pytest "${{ inputs.working-path }}" -m "not integration and not e2e" -q
+
+  integration-test:
+    name: integration-test
+    if: inputs.run-integration-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: python
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Sync (locked — fails on lockfile/pyproject drift)
+        run: uv sync --package "${{ inputs.package-name }}" --locked
+      - name: Integration tests
+        run: uv run pytest "${{ inputs.working-path }}" -m integration -q
