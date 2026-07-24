@@ -24,6 +24,14 @@ const { data, pending, error, refresh } = await useAsyncData(
 
     <p v-if="error" class="error">Failed to inspect container: {{ error.message }}</p>
     <template v-else-if="data">
+      <ContainerActions
+        :container-id="data.id"
+        :service="data.service"
+        :managed="data.managed"
+        class="detail-actions"
+        @done="refresh()"
+      />
+
       <dl class="detail">
         <div><dt>ID</dt><dd class="mono">{{ data.id }}</dd></div>
         <div><dt>Image</dt><dd>{{ data.image }}</dd></div>
@@ -108,6 +116,9 @@ const { data, pending, error, refresh } = await useAsyncData(
 .back {
   color: var(--muted);
   font-size: 0.85rem;
+}
+.detail-actions {
+  margin-bottom: 1.25rem;
 }
 .detail {
   display: grid;

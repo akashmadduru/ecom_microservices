@@ -6,6 +6,199 @@ entries except to mark them superseded. Audience: engineering. Related:
 
 ---
 
+## 2026-07-24 — Second, dedicated mutate-only `docker-socket-proxy` instead of widening the read-only one {#second-dedicated-mutate-only-docker-socket-proxy-instead-of-widening-the-read-only-one}
+
+**Context.** Phase 2 build ([`Feature.md`](./Feature.md#phase-2-gated-container-mutations),
+[`Changes.md`](./Changes.md#change-set-phase-2-build--gated-container-mutations-stopstartrestart--2026-07-24)).
+Follows directly from Phase 1's [socket-proxy decision](#docker-socket-proxy-not-a-direct-socket-mount),
+which explicitly flagged that Phase 2 "should not simply loosen the existing read-only
+proxy config" — this entry is that revisit, and records why the first attempt at it
+was wrong.
+
+**Decision.** Mutations (stop/start/restart) are served by a **second, completely
+separate** `docker-socket-proxy-mutate` container, configured with `CONTAINERS=0` (and
+every other read-style section off) and *only* the `ALLOW_START`/`ALLOW_STOP`/
+`ALLOW_RESTARTS` toggles enabled (plus `POST`, required for any of those to activate).
+The dashboard reaches it through a **second, independent** dockerode client
+(`getMutatingProvider()` in `singleton.ts`, using `MUTATE_DOCKER_HOST`/
+`MUTATE_DOCKER_PORT`) — never the same client, and never the same proxy container, as
+the read-only side (`getRuntimeProvider()`, `DOCKER_HOST`/`DOCKER_PORT`).
+
+**Why (the mid-implementation correction that produced this decision).** The FIRST
+implementation pass proposed the obvious-looking approach: widen the *existing*
+read-only proxy by adding `POST=1` plus the three `ALLOW_*` toggles to it, since it
+was already running and already had `CONTAINERS=1` enabled for reads/inspect/logs.
+Before shipping that, the proxy's real `haproxy.cfg` was fetched and read (not
+assumed) to verify the change was actually safe — and it wasn't: in
+`tecnativa/docker-socket-proxy`, the `CONTAINERS` toggle matches the broad
+`/containers` path prefix for **both** GET and POST, with no method-level carve-out.
+So a single proxy with `CONTAINERS=1` (needed for the existing reads) plus `POST=1`
+(needed for mutations) would **also** have admitted `POST /containers/create` and
+`POST /containers/prune` — silently reopening the exact host-root-equivalent
+capability the read-only proxy was built in Phase 1 specifically to prevent. This
+would have been a severe, easy-to-miss regression: correct-looking config, catastrophic
+actual behavior.
+
+Further reading of the same `haproxy.cfg` then revealed the fact that made a *better*
+design possible: `ALLOW_START`/`ALLOW_STOP`/`ALLOW_RESTARTS` are **independent,
+path-specific** rules that match only `/containers/{id}/(start|stop|restart|kill)` —
+they do **not** require `CONTAINERS=1` to function at all. That meant a proxy could be
+built with `CONTAINERS=0` and only those three toggles (plus `POST`) on, and it would
+be physically unable to reach `/containers/create`, `/containers/prune`, `/containers`
+(list), or `/containers/{id}/json` (inspect) — only the four specific lifecycle verbs
+on a container whose ID it's given. This is the design that shipped: two proxies, two
+dockerode clients, two genuinely isolated network paths — not one proxy shared by two
+app-level code paths.
+
+**Alternatives rejected.**
+*Widen the existing read-only proxy with `POST=1` + the three `ALLOW_*` toggles* —
+the originally proposed design; rejected once the real `haproxy.cfg` showed
+`CONTAINERS` has no GET/POST carve-out, so this would have also opened
+`/containers/create` and `/containers/prune` at the proxy layer, undermining the
+entire Phase 1 read-only guarantee.
+*Give the dashboard's Nitro process a raw `/var/run/docker.sock` mount for mutations
+only, keeping the existing proxy for reads* — rejected for the same reason a direct
+socket mount was rejected in Phase 1: the socket is host-root-equivalent and
+undifferentiated once opened; there is no way to grant "just start/stop/restart" at
+the socket level, only at the proxy/API level.
+*Run a single proxy config with `CONTAINERS=1` but rely on the app layer to never
+call `/containers/create` or `/containers/prune`* — rejected: this reduces "no
+create/prune" to a property of this codebase's discipline rather than one enforced by
+infrastructure, exactly the failure mode the original socket-proxy decision was
+designed to avoid; a future contributor or a compromised dependency could bypass it
+silently, and — separately — it wouldn't even be true, since the *proxy itself* would
+still accept those calls from anything else that could reach it on the network, not
+just from this app's code.
+
+**Consequences.** Two proxy containers to run and reason about instead of one
+(operational cost), and a second thing that can fail or be misconfigured
+independently. In exchange: the mutate proxy is real, proxy-layer least privilege —
+even a `POST` call crafted by hand against it can reach only the four lifecycle
+sub-paths, never create/prune/exec/build/list/inspect — not merely an app-layer
+promise on top of a wider grant. This is also why both proxy images are pinned to
+`tecnativa/docker-socket-proxy:v0.4.2` rather than `:latest` (security review
+finding, fixed before merge): the entire least-privilege argument above depends on
+this exact image's ACL behavior in its `haproxy.cfg`, and a silent version bump could
+change it without anyone noticing.
+
+A residual risk remains and is deliberately accepted, not fixed here: the mutate
+proxy has no concept of "which container is allowed" — only "which verbs are
+reachable." Per-container scoping (`OPS_MANAGED_SERVICES`) is enforced entirely at the
+app layer (`mutation-guard.ts`), not the proxy layer, because the Docker Engine API
+itself has no per-container ACL to delegate to. Full detail:
+[FutureWork.md](./FutureWork.md#phase-2-build--gated-container-mutations).
+
+**Revisit when.** Any future phase that considers exposing more mutating verbs (e.g.
+`kill` directly, or anything beyond stop/start/restart) — re-verify against the then-
+current `docker-socket-proxy` image version's ACL behavior before assuming the same
+independence-from-`CONTAINERS` property still holds; do not assume it transfers to a
+different verb or a different proxy image/version without checking.
+
+---
+
+## 2026-07-24 — Phase 2 mutation scope: stop/start/restart only; rebuild explicitly ruled out {#phase-2-mutation-scope-stopstartrestart-only-rebuild-ruled-out}
+
+**Context.** Phase 2 build. The original ask for "mutating controls" was broad enough
+to plausibly include stop, start, restart, rebuild, remove, disable, and exec. Phase 1
+explicitly deferred all of it as "Phase 2 (mutating controls)" without further
+scoping.
+
+**Decision.** Phase 2 implements exactly three actions — stop, start, restart — via
+`MutatingRuntimeProvider` (`server/runtime/mutating-types.ts`). "Disable" is treated
+as a synonym for stop, not built as a separate mechanism. Rebuild, remove, and exec
+are not implemented; rebuild specifically was evaluated and explicitly rejected as
+out of scope, not merely deferred for time.
+
+**Why.** Rebuild requires build-context/source access — the running container's image
+would need to be reconstructed from a Dockerfile and build context, which this
+standalone, copy-out-able project (see
+[standalone/copy-out-able design](#standalone-copy-outable-design)) deliberately does
+not have and does not want: giving a network-reachable dashboard the ability to
+execute arbitrary `Dockerfile` build instructions is a fundamentally larger trust
+boundary than starting/stopping/restarting an *already-built* container, and was
+judged the single highest-RCE-risk capability named in the original ask. Remove and
+exec were never actually requested in the original scope and share the same
+"unbounded blast radius vs. narrow lifecycle management" problem, so they were left
+out rather than added speculatively. "Disable" collapsing into "stop" avoided building
+a second code path (with its own gate-checking and audit logging) that would do
+nothing a plain stop doesn't already do — a stopped container stays stopped until
+explicitly started again, which satisfies "disable" as stated.
+
+**Alternatives rejected.**
+*Implement rebuild, scoped to only the four platform Python services with known
+Dockerfiles* — rejected: even scoped narrowly, this requires the dashboard to have
+(or fetch) build context and invoke a build, which is a materially different and
+larger capability than anything else in this project; the "narrow lifecycle
+management of an already-existing container" framing that justifies the rest of
+Phase 2 doesn't extend to it.
+*Build "disable" as a distinct action/route from "stop," perhaps with a different
+audit-log verb* — rejected: no behavioral difference from stop was ever identified;
+a distinct mechanism would mean maintaining two gate-checked, audited code paths that
+do the same thing.
+
+**Consequences.** The mutating surface stays small and reviewable: three methods on
+one interface (`MutatingRuntimeProvider`), three new routes, one guard function. An
+operator who genuinely needs to rebuild a container still has to do so outside this
+dashboard (e.g. `docker compose build` directly against the host) — an accepted
+friction cost, not a gap expected to close in a later phase without a fresh, separate
+scoping/approval discussion.
+
+**Revisit when.** If a future phase is explicitly asked to add rebuild/remove/exec —
+treat it as a new trust-boundary design exercise (likely needing its own proxy/access-
+path story, mirroring how Phase 2 itself needed one relative to Phase 1), not an
+incremental extension of `MutatingRuntimeProvider`.
+
+---
+
+## 2026-07-24 — Mutation audit trail: structured stdout JSON lines, no persistence, no per-user identity {#mutation-audit-trail-stdout-json-no-persistence}
+
+**Context.** Phase 2 build, `mutation-guard.ts`. Every mutation attempt needed some
+record of what happened, for after-the-fact review of who did what to which
+container.
+
+**Decision.** Every mutation attempt — denied by either gate, attempted, succeeded, or
+errored — is emitted as one structured JSON line to stdout (`{"event":"ops.mutation",
+"ts":...,"action":...,"containerId":...,"containerName":...,"service":...,
+"allowed":...,"outcome":...}`), built through a single bound `audit()` closure inside
+`runContainerMutation` so every call site shares one shape. There is no database
+table, no log file, and no `principal`/`actor` field.
+
+**Why.** This project owns no persistence layer in either phase — adding one solely
+for an audit trail would be a disproportionate new dependency (a database, or at
+minimum a file with rotation/retention concerns) for a small internal tool, and stdout
+is already the right integration point for anyone who wants durable retention: this
+dashboard is expected to run as a container, and container stdout is exactly what any
+operator's existing log-aggregation setup already collects. The absence of a
+`principal` field is not an oversight: this project authenticates with a single
+shared `OPS_API_TOKEN`, not per-operator accounts, so there genuinely is no "who"
+value to record beyond "someone holding the token" — inventing a fake identity field
+that's always the same value would be actively misleading, implying a granularity of
+accountability the auth model doesn't provide.
+
+**Alternatives rejected.**
+*Write audit entries to a local SQLite file or similar embedded database* —
+rejected: introduces a persistence layer and its own failure modes (disk space,
+corruption, concurrent-write handling) into a project whose whole architecture,
+across both phases, has been "own no state, read/act on live Docker Engine state
+only."
+*Add a placeholder `principal`/`user` field populated with a static value like
+`"shared-token"`* — rejected: a field that's always the same value adds noise
+without adding information, and risks being read by a future maintainer as more
+meaningful than it is.
+
+**Consequences.** The audit trail is only as durable as wherever stdout is shipped —
+an operator running the dashboard without a log-aggregation setup effectively has no
+retained audit trail once the container's log buffer rotates. This is called out
+explicitly in the audit-logging code's own comment and in
+[FutureWork.md](./FutureWork.md#phase-2-build--gated-container-mutations), not left
+implicit.
+
+**Revisit when.** If per-operator identity is ever added (see the residual-risk
+discussion in [FutureWork.md](./FutureWork.md#phase-2-build--gated-container-mutations)),
+the audit entry shape should gain a real `principal` field at that point — not before.
+
+---
+
 ## 2026-07-24 — Docker access via a `docker-socket-proxy` sidecar, never a direct socket mount {#docker-socket-proxy-not-a-direct-socket-mount}
 
 **Context.** Phase 1 build ([`Feature.md`](./Feature.md),
@@ -62,6 +255,12 @@ silently reporting stale/empty state.
 separately-scoped proxy config (or a different access path entirely) will be needed for
 the specific allowlisted mutating calls Phase 2 exposes; the existing read-only proxy
 config should not simply be loosened.
+
+**Addressed:** Phase 2 shipped 2026-07-24 — see
+[Second, dedicated mutate-only `docker-socket-proxy`](#second-dedicated-mutate-only-docker-socket-proxy-instead-of-widening-the-read-only-one)
+above for the resulting design (and the mid-implementation correction that produced
+it). This entry's guidance — "don't simply loosen the existing read-only proxy" —
+was followed.
 
 ---
 

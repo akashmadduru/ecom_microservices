@@ -16,6 +16,7 @@ const columns = [
   { key: 'health', label: 'Health' },
   { key: 'service', label: 'Service' },
   { key: 'project', label: 'Project' },
+  { key: 'actions', label: 'Actions' },
 ]
 
 function openDetail(row: ContainerSummary): void {
@@ -49,6 +50,14 @@ function openDetail(row: ContainerSummary): void {
       </template>
       <template #cell-project="{ row }">
         {{ row.project ?? '—' }}
+      </template>
+      <template #cell-actions="{ row }">
+        <ContainerActions
+          :container-id="row.id"
+          :service="row.service"
+          :managed="row.managed"
+          @done="refresh()"
+        />
       </template>
     </DataTable>
   </div>

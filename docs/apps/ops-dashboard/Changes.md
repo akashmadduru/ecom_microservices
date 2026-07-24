@@ -6,6 +6,156 @@ recent first. Related: [`Feature.md`](./Feature.md), [`DecisionLog.md`](./Decisi
 
 ---
 
+## Change set: Phase 2 build — gated container mutations (stop/start/restart) — 2026-07-24
+
+Built on top of Phase 1 ([`Changes.md`](#change-set-phase-1-build--read-only-docker-observability-dashboard--2026-07-24)).
+Full feature description: [`Feature.md`](./Feature.md#phase-2-gated-container-mutations).
+Related decisions: [`DecisionLog.md`](./DecisionLog.md).
+
+### Summary
+
+Added a narrow, opt-in mutating surface — stop / start / restart of individual
+containers — gated behind two independent, fail-closed conditions: a global kill
+switch (`OPS_ALLOW_MUTATIONS` must be exactly `"true"`) and a per-service allowlist
+(`OPS_MANAGED_SERVICES`, matched against the `com.docker.compose.service` label).
+Rebuild was evaluated and explicitly ruled out as out of scope (highest RCE risk,
+requires build-context/source access this project deliberately doesn't have); remove
+and exec were never in scope. "Disable" was implemented as a synonym for stop, not a
+separate mechanism. Every mutation attempt — denied, attempted, succeeded, or errored
+— is written as a structured JSON audit line to stdout; there is no database/file sink
+and no per-user identity field, since auth is still a single shared bearer token.
+
+Mutations are served through a **second, dedicated** `docker-socket-proxy-mutate`
+container and a **second, separate** dockerode client on the app side — not by
+widening the existing read-only proxy. This was a mid-implementation correction: the
+first design (add `POST=1` plus the image's `ALLOW_START`/`ALLOW_STOP`/
+`ALLOW_RESTARTS` toggles to the *existing* read-only proxy) was caught as unsafe by
+reading the proxy's real `haproxy.cfg` before shipping it — see
+[DecisionLog](./DecisionLog.md#second-dedicated-mutate-only-docker-socket-proxy-instead-of-widening-the-read-only-one)
+for the full story.
+
+### Files changed
+
+- `vue/ops-dashboard/server/runtime/mutating-types.ts` — **new.** `MutatingRuntimeProvider`
+  interface (`stopContainer`/`startContainer`/`restartContainer`), deliberately
+  separate from the read-only `RuntimeProvider` (`types.ts`), which carries an
+  explicit "never add mutating methods here" comment.
+- `vue/ops-dashboard/server/runtime/docker-mutating-provider.ts` — **new.**
+  `DockerMutatingProvider implements MutatingRuntimeProvider`, a thin dockerode
+  wrapper (`getContainer(id).stop()/.start()/.restart()`) using its own dockerode
+  client, never the read-only `DockerProvider`'s client.
+- `vue/ops-dashboard/server/runtime/mutation-guard.ts` — **new.** `runContainerMutation`
+  orchestrator: checks the global kill switch first (before any inspect call), then
+  resolves the container's compose service via the existing read-only inspect path
+  and checks it against the allowlist, then invokes the mutating provider. Every
+  branch (denied/attempt/success/error) logs one audit line via a single bound
+  `audit()` closure (refactored during code review from 5 duplicated call sites — see
+  Review outcomes below).
+- `vue/ops-dashboard/server/runtime/container-request.ts` — **new.** Extracted shared
+  helpers used by both read and mutation routes: `assertValidContainerId` (validates
+  the `id` route param against a strict hex/name pattern before it ever reaches
+  dockerode's unescaped path-concatenation, closing an injection surface that matters
+  more once mutating endpoints exist) and `translateDockerNotFound` (maps dockerode's
+  404 to h3's `createError`).
+- `vue/ops-dashboard/server/runtime/singleton.ts` — **updated.** Now holds **two**
+  independent `Docker()` clients and providers (`getDockerClient`/`getRuntimeProvider`
+  for reads, `getMutatingDockerClient`/`getMutatingProvider` for mutations), never
+  sharing a client across the two. Header comment updated — it previously said "one
+  shared client," which became stale the moment the second client was added (code
+  review finding, fixed before merge).
+- `vue/ops-dashboard/server/runtime/config.ts` — **updated.** Added
+  `mutateDockerHost`/`mutateDockerPort` (separate proxy target),
+  `mutationsAllowed` (strict `=== "true"` check on `OPS_ALLOW_MUTATIONS`), and
+  `managedServices` (parsed from `OPS_MANAGED_SERVICES`). Header comment updated to
+  list the new env vars (code review finding — it previously only described the
+  Phase 1 vars).
+- `vue/ops-dashboard/server/routes/api/containers/[id]/{stop,start,restart}.post.ts`
+  — **new.** Each validates the id then delegates entirely to
+  `runContainerMutation('stop'|'start'|'restart', id)`.
+- `vue/ops-dashboard/server/routes/api/mutations-config.get.ts` — **new.** Returns
+  `{ allowed, managedServices }` so the frontend can decide whether to render
+  mutation controls at all, rather than discovering the feature is disabled only by
+  attempting an action and getting a 403. Still behind the bearer-auth middleware;
+  never returns the token or any other secret.
+- `vue/ops-dashboard/app/components/ContainerActions.vue` — **new.** Renders
+  Stop/Start/Restart buttons only when `/api/mutations-config` reports mutations
+  allowed **and** the specific container is compose-managed **and** on the returned
+  allowlist. A native `confirm()` guards every action. Controls are absent (not
+  disabled) when mutations are off, so the UI never implies a capability that isn't
+  there.
+- `vue/ops-dashboard/docker-compose.ops.yml` — **updated.** Added the
+  `docker-socket-proxy-mutate` service (pinned `tecnativa/docker-socket-proxy:v0.4.2`,
+  `CONTAINERS=0`, only `ALLOW_START`/`ALLOW_STOP`/`ALLOW_RESTARTS` + `POST` toggleable
+  via `OPS_PROXY_*` vars, all defaulting to `0`); added `MUTATE_DOCKER_HOST`/
+  `MUTATE_DOCKER_PORT`/`OPS_ALLOW_MUTATIONS`/`OPS_MANAGED_SERVICES` to the
+  `ops-dashboard` service's environment (all defaulting to the disabled state); the
+  existing read-only `docker-socket-proxy` service's image tag was also pinned from
+  an implicit `:latest` to the explicit `v0.4.2` (security review finding — the
+  least-privilege argument for both proxies depends on that exact image's ACL
+  behavior).
+- `vue/ops-dashboard/.env.example` — **updated.** Documents the five new env vars
+  (`MUTATE_DOCKER_HOST`, `MUTATE_DOCKER_PORT`, `OPS_ALLOW_MUTATIONS`,
+  `OPS_MANAGED_SERVICES`, plus the four compose-only `OPS_PROXY_*` toggles), all
+  defaulted to the disabled state.
+- `vue/ops-dashboard/README.md` — **updated.** New "Phase 2: gated container
+  controls" section documenting both gates, the audit trail, and — in detail — why
+  mutations run through a second dedicated proxy rather than a widened read-only one.
+  Also fixed a pre-existing contradiction (code review finding): the prose claimed
+  `INFO=1` was enabled on the read-only proxy while the compose file explicitly left
+  it disabled; prose corrected to match the shipped config.
+- `vue/ops-dashboard/test/{docker-mutating-provider,mutation-route,container-request,
+  auth-middleware,log-stream-limiter}.test.ts` — **new** (the first two) and
+  supporting/expanded coverage added alongside them. Test suite grew from 65 (end of
+  Phase 1) to 77 tests, all passing.
+
+### Breaking Changes
+
+None. Every new env var defaults to the disabled/safe state; an operator who
+redeploys the dashboard without setting any of the Phase 2 vars gets Phase 1's
+read-only behavior exactly as before, plus one additional (idle, unreachable-from-
+outside-`ops_network`) proxy container in the batteries-included compose path.
+
+### Migration Steps Required
+
+None required to stay read-only. To opt into mutations: set `OPS_ALLOW_MUTATIONS=true`
+and a non-empty `OPS_MANAGED_SERVICES` on the dashboard service, **and** (batteries-
+included path) set `OPS_PROXY_POST=1`, `OPS_PROXY_ALLOW_START=1`,
+`OPS_PROXY_ALLOW_STOP=1`, `OPS_PROXY_ALLOW_RESTARTS=1` on `docker-socket-proxy-mutate`
+— all seven must be set together, or mutations stay off. See
+`vue/ops-dashboard/README.md`'s "Phase 2: gated container controls" section.
+
+### Rollback Plan
+
+Unset `OPS_ALLOW_MUTATIONS` (or set it to anything other than `"true"`) to disable
+mutations instantly without redeploying — the app-layer gate is checked first, before
+any Docker call. To fully remove the Phase 2 surface, revert this change set;
+`docker-socket-proxy-mutate` can also simply be stopped/removed independently of the
+dashboard and the read-only proxy, since it is a separate compose service with no
+other consumer.
+
+### Verification performed
+
+- `npm run lint`, `npm run type-check`, `npm test` (vitest, grew from 65 to 77 tests),
+  `npm run build` — all green.
+- `docker compose -f docker-compose.ops.yml config` verified clean in both the
+  default (mutations-disabled) and mutations-enabled states.
+- **Security review:** no blockers. One medium finding (the mutate-proxy's lack of
+  per-container ACL — the allowlist is app-layer only; documented, not fixed, as an
+  accepted residual risk — see [FutureWork.md](./FutureWork.md#phase-2-build--gated-container-mutations)),
+  one low finding (proxy images pinned from implicit `:latest` to `v0.4.2` — fixed),
+  two informational (`ALLOW_RESTARTS` also covers `kill`, noted in compose comments;
+  a benign TOCTOU between the read-only proxy's inspect call and the mutate proxy's
+  action call, judged non-exploitable since compose labels are immutable and
+  container IDs aren't recycled).
+- **Code review:** approved with comments, no blockers. One Major (audit-log
+  construction duplicated across 5 call sites in `mutation-guard.ts` — refactored to
+  a single bound `audit()` closure — fixed), plus stale-comment/doc fixes: `singleton.ts`'s
+  header comment ("one shared client") and `config.ts`'s header comment (missing the
+  new env vars) updated to match the post-Phase-2 code; a real prose/config
+  contradiction in `README.md` about `INFO=1` corrected.
+
+---
+
 ## Change set: Phase 1 build — read-only Docker observability dashboard — 2026-07-24
 
 New standalone project. Full feature description: [`Feature.md`](./Feature.md).
