@@ -1,0 +1,13 @@
+{
+  "name": "lib",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "dependencies": {
+    "core": "*"
+  },
+  "peerDependencies": {
+    "vue": "^3.5.0",
+    "vue-router": "^5.1.0"
+  }
+}
