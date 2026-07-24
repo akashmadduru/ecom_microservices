@@ -45,6 +45,6 @@ for context, not as the focus of this diagram.
 
 ## Diagram source files
 
-- Mermaid: `docs/diagrams/component-products-page-filters.mmd`
-- Related: `docs/diagrams/sequence-category-drilldown-lazyfetch.mmd`,
-  `docs/diagrams/sequence-products-page-filter-pagination.mmd`
+- Mermaid: `docs/apps/ecom-web/diagrams/component-products-page-filters.mmd`
+- Related: `docs/apps/ecom-web/diagrams/sequence-category-drilldown-lazyfetch.mmd`,
+  `docs/apps/ecom-web/diagrams/sequence-products-page-filter-pagination.mmd`

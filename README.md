@@ -20,7 +20,9 @@ ecom_microservices/
 │   └── libs/ecom_common/      Shared Python lib (workspace path dependency, not published)
 ├── deploy/                  Shared container entrypoint + Postgres bootstrap script
 ├── terraform/                AWS VPC + EKS stub (not yet wired to CD)
-├── docs/services/<name>/    Per-service HLD/LLD/diagrams (convention; not all services have one yet)
+├── docs/                     The one documentation root for the whole platform — see docs/SDLC.md
+│   ├── services/<name>/       Per-service HLD/LLD/diagrams (convention; not all services have one yet)
+│   └── apps/<name>/           Per-frontend-app docs, same convention (e.g. apps/ecom-web/)
 └── .github/workflows/        One CI pipeline per component — see "CI/CD" below
 ```
 
@@ -29,6 +31,16 @@ Each of the 5 components above (`apps/ecom-web` + 4 services) builds, lints, and
 ## CI/CD
 
 GitHub Actions, one workflow file per component under `.github/workflows/` (`ci-api-gateway.yml`, `ci-auth-service.yml`, `ci-inventory-service.yml`, `ci-product-service.yml`, `ci-ecom-common.yml`, `ci-ecom-web.yml`), each triggered by its own `paths:` filter and built on top of three shared reusable workflows (`_reusable-python-lint-test.yml`, `_reusable-docker-build-push.yml`, `_reusable-node-app-ci.yml`) so the pipeline logic itself isn't duplicated 5 times. Every component: lints, runs its unit tests (`product_service` also runs its `integration`-marked tests), then builds a Docker image — pushed to `ghcr.io` only on merge to `main`, tagged `sha-<short-sha>` and `latest`. `lint-workflows.yml` runs `actionlint` over the workflow files themselves. `cd-deploy.yml` is a `workflow_dispatch`-only stub — real deployment to the EKS cluster in `terraform/eks.tf` isn't wired yet (no ECR/IAM/k8s manifests, no AWS credentials in this repo); see `docs/FutureWork.md`.
+
+## SDLC — how work happens here
+
+Every feature and bug fix goes through the same pipeline: plan → architecture → approval
+gate → implement → review (code + security) → document → test — enforced by the
+`sdlc-root` agent (`.claude/agents/orchestrator/sdlc-root.md`), the project-pinned entry
+point for this repo. `docs/SDLC.md` is the human-readable version of the same process,
+including the documentation convention (`docs/services/<name>/`, `docs/apps/<name>/`) and
+the non-negotiables (mandatory Approval Gate, mandatory Security Review triggers). Start
+there before making a substantial change.
 
 ## Architecture
 

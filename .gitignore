@@ -43,4 +43,3 @@ archive.zip
 python/services/*/.env
 .venv
 uv.lock.bak
-.claude

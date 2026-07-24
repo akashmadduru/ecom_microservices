@@ -79,4 +79,4 @@ request eliminates this: both are populated from the exact same
 
 ## Diagram source files
 
-- Mermaid: `docs/diagrams/sequence-products-page-filter-pagination.mmd`
+- Mermaid: `docs/apps/ecom-web/diagrams/sequence-products-page-filter-pagination.mmd`

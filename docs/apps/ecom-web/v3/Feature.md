@@ -74,7 +74,7 @@ Selected filters render as removable chips above the grid, each with a filter-sp
 ## How to extend — adding another server-side filter to the listing page
 
 Follows the same recipe as `AdminProductsPage.vue`'s server-mode pattern (see
-`docs/v2/Feature.md#how-to-extend--adding-a-6th-paginated-admin-list`):
+`docs/apps/ecom-web/v2/Feature.md#how-to-extend--adding-a-6th-paginated-admin-list`):
 
 1. Confirm the backend `GET /products` actually accepts the new query param — do not
    add a filter the API can't honor (this is exactly the mistake being fixed here).

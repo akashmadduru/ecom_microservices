@@ -44,7 +44,7 @@ behavior.
    *any* level of the tree — a top-level category or a fetched child — triggers
    `controller.setFilter('category_id', id)`, the exact same `useListController` flow
    already documented end-to-end in
-   `docs/diagrams/sequence-products-page-filter-pagination.mmd` (race protection,
+   `docs/apps/ecom-web/diagrams/sequence-products-page-filter-pagination.mmd` (race protection,
    atomic grid+pager update, etc.). That flow is not duplicated here.
 
 ## Key invariant
@@ -55,5 +55,5 @@ behavior.
 
 ## Diagram source files
 
-- Mermaid: `docs/diagrams/sequence-category-drilldown-lazyfetch.mmd`
-- Related: `docs/diagrams/sequence-products-page-filter-pagination.mmd` (filter selection → grid/pager flow, referenced in step 6 above)
+- Mermaid: `docs/apps/ecom-web/diagrams/sequence-category-drilldown-lazyfetch.mmd`
+- Related: `docs/apps/ecom-web/diagrams/sequence-products-page-filter-pagination.mmd` (filter selection → grid/pager flow, referenced in step 6 above)
