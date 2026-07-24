@@ -1,0 +1,1354 @@
+{
+  "info": {
+    "name": "Ecom Microservices API",
+    "description": "All discoverable HTTP endpoints across the four implemented services (API Gateway, Auth Service, Product Service, Inventory Service), read directly from each service's FastAPI routers. Auth/Inventory/Product folders hit each backend service directly (each enforces its own JWT auth via a `Depends(get_current_user)`-style dependency, independent of the gateway). The API Gateway folder documents the gateway's own health/ready/metrics endpoints plus a few representative requests through its single dynamic reverse-proxy route (`/api/v1/{path}`), which forwards to whichever backend `route_table.py` maps the path prefix to. Set `{{access_token}}` (an access token from Auth Service > Sign In) before running any request whose folder/item includes a Bearer auth block. NOTE: the gateway's static route table maps the whole `/admin` prefix to product-service only, so inventory's `/admin/inventory/*` endpoints are not reachable through the gateway today (`api_gateway/route_table.py`) -- call them directly against `inventory_base_url` instead, as this collection does.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:8080", "type": "default", "description": "API Gateway root (docker-compose maps 8080:8080). Proxied paths live under /api/v1/*." },
+    { "key": "auth_base_url", "value": "http://localhost:8001", "type": "default", "description": "Direct auth-service URL (docker-compose 8001:8001)." },
+    { "key": "product_base_url", "value": "http://localhost:8003", "type": "default", "description": "Direct product-service URL (docker-compose 8003:8003)." },
+    { "key": "inventory_base_url", "value": "http://localhost:8004", "type": "default", "description": "Direct inventory-service URL (docker-compose 8004:8004)." },
+    { "key": "access_token", "value": "", "type": "secret", "description": "JWT access token returned by Auth Service > Sign In / Sign Up flows." },
+    { "key": "refresh_token", "value": "", "type": "secret", "description": "Refresh token returned alongside the access token by TokenPair responses." },
+    { "key": "product_id", "value": "101", "type": "default" },
+    { "key": "variant_id", "value": "1", "type": "default" },
+    { "key": "image_id", "value": "1", "type": "default" },
+    { "key": "brand_id", "value": "1", "type": "default" },
+    { "key": "manufacturer_id", "value": "1", "type": "default" },
+    { "key": "category_id", "value": "1", "type": "default" },
+    { "key": "collection_id", "value": "1", "type": "default" },
+    { "key": "tag_id", "value": "1", "type": "default" },
+    { "key": "attribute_id", "value": "1", "type": "default" },
+    { "key": "attribute_value_id", "value": "1", "type": "default" },
+    { "key": "user_id", "value": "42", "type": "default" },
+    { "key": "order_id", "value": "order-8f3c1a", "type": "default" }
+  ],
+  "item": [
+    {
+      "name": "API Gateway",
+      "description": "services/api_gateway/src/api_gateway/main.py. The only functional route is a catch-all reverse proxy at `/api/v1/{path}` (methods GET/POST/PUT/PATCH/DELETE, `include_in_schema=False`), which authenticates the bearer token (if present), enforces the per-prefix RBAC policy from `route_table.py`, rate limits, and forwards untouched to the upstream service. `/internal/*` paths are always blocked (404) at the gateway. `/healthz`, `/readyz`, `/metrics` are mounted directly on the gateway app (not under /api/v1) via the shared `ecom_common.bootstrap.create_app`/`ecom_common.health.build_ops_router`.",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/healthz", "host": ["{{base_url}}"], "path": ["healthz"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Readiness Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/readyz", "host": ["{{base_url}}"], "path": ["readyz"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Metrics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/metrics", "host": ["{{base_url}}"], "path": ["metrics"] }
+          },
+          "response": []
+        },
+        {
+          "name": "[Proxy] Sign In (-> Auth Service)",
+          "description": "route_table.py: prefix /auth, policy {'*': PUBLIC}. Forwarded as-is to auth-service's POST /auth/signin.",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/x-www-form-urlencoded" }],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                { "key": "username", "value": "alice" },
+                { "key": "password", "value": "Str0ngPassw0rd!" }
+              ]
+            },
+            "url": { "raw": "{{base_url}}/api/v1/auth/signin", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "signin"] }
+          },
+          "response": []
+        },
+        {
+          "name": "[Proxy] List Products (-> Product Service)",
+          "description": "route_table.py: prefix /products, policy {'GET': PUBLIC, '*': {SELLER, ADMIN}}. GET is public through the gateway.",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/v1/products", "host": ["{{base_url}}"], "path": ["api", "v1", "products"] }
+          },
+          "response": []
+        },
+        {
+          "name": "[Proxy] Create Product (-> Product Service, requires SELLER/ADMIN)",
+          "description": "route_table.py: prefix /products, non-GET methods require role SELLER or ADMIN (checked against the JWT by the gateway before forwarding; the product-service itself re-checks via its own require_seller dependency).",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Ant Esports GW180 Corsa Gaming Racing Wheel\",\n  \"retail_price\": 89.99,\n  \"discount\": 10.00,\n  \"category\": \"Gaming\",\n  \"sub_category\": \"Accessories\",\n  \"brand\": \"Ant Esports\",\n  \"description\": \"Force-feedback racing wheel with pedals.\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/products", "host": ["{{base_url}}"], "path": ["api", "v1", "products"] }
+          },
+          "response": []
+        },
+        {
+          "name": "[Proxy] Get Inventory by Product (-> Inventory Service)",
+          "description": "route_table.py: prefix /inventory, policy {'GET': PUBLIC, '*': {SELLER, ADMIN}}.",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/inventory/:product_id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "inventory", ":product_id"],
+              "variable": [{ "key": "product_id", "value": "{{product_id}}" }]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "[Proxy] Reserve Stock (-> Inventory Service, requires SELLER/ADMIN)",
+          "description": "route_table.py: prefix /inventory, non-GET methods require role SELLER or ADMIN.",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"order_id\": \"{{order_id}}\",\n  \"quantity\": 2\n}" },
+            "url": {
+              "raw": "{{base_url}}/api/v1/inventory/:product_id/reserve",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "inventory", ":product_id", "reserve"],
+              "variable": [{ "key": "product_id", "value": "{{product_id}}" }]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Auth Service",
+      "description": "services/auth_service/src/auth_service/api/routes.py (router prefix /auth, tags=[auth]) plus internal_router (prefix /internal, include_in_schema=False, not gateway-routable). Called directly against {{auth_base_url}}; no /api/v1 prefix at the service level (that only exists at the gateway).",
+      "item": [
+        {
+          "name": "Sign Up",
+          "description": "POST /auth/signup. Body: UserSignup {username, email?, password, role?} (role defaults to CUSTOMER; privileged roles require an ADMIN caller, enforced in service). No auth required.",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"alice\",\n  \"email\": \"alice@example.com\",\n  \"password\": \"Str0ngPassw0rd!\",\n  \"role\": \"CUSTOMER\"\n}"
+            },
+            "url": { "raw": "{{auth_base_url}}/auth/signup", "host": ["{{auth_base_url}}"], "path": ["auth", "signup"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Sign In",
+          "description": "POST /auth/signin. OAuth2 password grant form (OAuth2PasswordRequestForm): username, password. No auth required. Returns TokenPair (access_token, refresh_token, token_type, expires_in, role).",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/x-www-form-urlencoded" }],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                { "key": "username", "value": "alice" },
+                { "key": "password", "value": "Str0ngPassw0rd!" }
+              ]
+            },
+            "url": { "raw": "{{auth_base_url}}/auth/signin", "host": ["{{auth_base_url}}"], "path": ["auth", "signin"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Refresh Token",
+          "description": "POST /auth/token/refresh. Body: RefreshRequest {refresh_token}. No auth header required (the refresh token itself is the credential). Reuse of a rotated-away token kills the whole session.",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}" },
+            "url": { "raw": "{{auth_base_url}}/auth/token/refresh", "host": ["{{auth_base_url}}"], "path": ["auth", "token", "refresh"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Logout",
+          "description": "POST /auth/logout. Auth: Depends(get_current_token) -> Bearer access token required. Denylists the current token's jti.",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [],
+            "url": { "raw": "{{auth_base_url}}/auth/logout", "host": ["{{auth_base_url}}"], "path": ["auth", "logout"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Logout All Sessions",
+          "description": "POST /auth/logout/all. Auth: Depends(get_current_token) -> Bearer access token required. Revokes all active sessions for the calling user.",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [],
+            "url": { "raw": "{{auth_base_url}}/auth/logout/all", "host": ["{{auth_base_url}}"], "path": ["auth", "logout", "all"] }
+          },
+          "response": []
+        },
+        {
+          "name": "SSO Google Login (ID token)",
+          "description": "POST /auth/sso/google. Body: GoogleLoginRequest {token} (Google ID token obtained by the frontend). No auth header required.",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"token\": \"<google-id-token-from-frontend>\"\n}" },
+            "url": { "raw": "{{auth_base_url}}/auth/sso/google", "host": ["{{auth_base_url}}"], "path": ["auth", "sso", "google"] }
+          },
+          "response": []
+        },
+        {
+          "name": "SSO Generic Login",
+          "description": "POST /auth/sso/login. Body: SSOLoginRequest {provider, subject, email?, display_name?}. No auth header required. Generic upsert for pre-verified identities.",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"provider\": \"google\",\n  \"subject\": \"1234567890\",\n  \"email\": \"alice@example.com\",\n  \"display_name\": \"Alice\"\n}"
+            },
+            "url": { "raw": "{{auth_base_url}}/auth/sso/login", "host": ["{{auth_base_url}}"], "path": ["auth", "sso", "login"] }
+          },
+          "response": []
+        },
+        {
+          "name": "SSO Google Authorize (browser redirect)",
+          "description": "GET /auth/sso/google/authorize. No auth required. Returns a 307 redirect to Google's consent screen; intended for a browser, not a plain API call.",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{auth_base_url}}/auth/sso/google/authorize", "host": ["{{auth_base_url}}"], "path": ["auth", "sso", "google", "authorize"] }
+          },
+          "response": []
+        },
+        {
+          "name": "SSO Google Callback",
+          "description": "GET /auth/sso/google/callback?code=&state=. Query params: code (str), state (str). No auth header required; Google redirects here after consent.",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{auth_base_url}}/auth/sso/google/callback?code=<auth-code>&state=<state>",
+              "host": ["{{auth_base_url}}"],
+              "path": ["auth", "sso", "google", "callback"],
+              "query": [
+                { "key": "code", "value": "<auth-code>" },
+                { "key": "state", "value": "<state>" }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Validate Token",
+          "description": "GET /auth/validate. Auth: Depends(get_current_token) -> Bearer access token required. Returns the caller's UserResponse.",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }] },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{auth_base_url}}/auth/validate", "host": ["{{auth_base_url}}"], "path": ["auth", "validate"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Current User",
+          "description": "GET /auth/users/me. Auth: Depends(get_current_token) -> Bearer access token required.",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }] },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{auth_base_url}}/auth/users/me", "host": ["{{auth_base_url}}"], "path": ["auth", "users", "me"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Admin Diagnostics",
+          "description": "GET /auth/admin/diagnostics. Auth: Depends(require_roles(get_current_token, Role.ADMIN)) -> Bearer access token required, caller role must be ADMIN.",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }] },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{auth_base_url}}/auth/admin/diagnostics", "host": ["{{auth_base_url}}"], "path": ["auth", "admin", "diagnostics"] }
+          },
+          "response": []
+        },
+        {
+          "name": "[Internal] Get User by ID",
+          "description": "GET /internal/users/{user_id}. internal_router (prefix /internal, include_in_schema=False) -- service-to-service only (used by the order saga's validate_user activity); not routable through the gateway, which 404s any /internal/* path. No auth dependency is declared on this handler itself (only DbDep, AuthServiceDep) -- trust boundary is network-level (call from another service), not a bearer token.",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{auth_base_url}}/internal/users/:user_id",
+              "host": ["{{auth_base_url}}"],
+              "path": ["internal", "users", ":user_id"],
+              "variable": [{ "key": "user_id", "value": "{{user_id}}" }]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{auth_base_url}}/healthz", "host": ["{{auth_base_url}}"], "path": ["healthz"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Readiness Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{auth_base_url}}/readyz", "host": ["{{auth_base_url}}"], "path": ["readyz"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Metrics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{auth_base_url}}/metrics", "host": ["{{auth_base_url}}"], "path": ["metrics"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Inventory Service",
+      "description": "services/inventory_service/src/inventory_service/api/routes.py: router (prefix /inventory, tags=[inventory]), admin_router (prefix /admin/inventory, tags=[admin]), internal_router (prefix /internal, include_in_schema=False, not gateway-routable). Called directly against {{inventory_base_url}}. require_seller = require_roles(get_current_user, Role.SELLER) (SELLER or ADMIN); require_admin = require_roles(get_current_user, Role.ADMIN) (ADMIN only).",
+      "item": [
+        {
+          "name": "List Low Stock Products",
+          "description": "GET /inventory/reports/low-stock. Query: page (int, default 1), page_size (int, default 20, max 100). Auth: require_seller (SELLER or ADMIN).",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }] },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{inventory_base_url}}/inventory/reports/low-stock?page=1&page_size=20",
+              "host": ["{{inventory_base_url}}"],
+              "path": ["inventory", "reports", "low-stock"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "page_size", "value": "20" }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Out of Stock Products",
+          "description": "GET /inventory/reports/out-of-stock. Query: page, page_size. Auth: require_seller (SELLER or ADMIN).",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }] },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{inventory_base_url}}/inventory/reports/out-of-stock?page=1&page_size=20",
+              "host": ["{{inventory_base_url}}"],
+              "path": ["inventory", "reports", "out-of-stock"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "page_size", "value": "20" }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Inventory",
+          "description": "GET /inventory. Query: page, page_size, status (alias, one of IN_STOCK/LOW_STOCK/OUT_OF_STOCK), warehouse_location (exact match). No auth dependency declared on this handler.",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{inventory_base_url}}/inventory?page=1&page_size=20",
+              "host": ["{{inventory_base_url}}"],
+              "path": ["inventory"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "page_size", "value": "20" },
+                { "key": "status", "value": "IN_STOCK", "disabled": true },
+                { "key": "warehouse_location", "value": "DEFAULT", "disabled": true }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Inventory by Product",
+          "description": "GET /inventory/{product_id}. Path param: product_id (int). No auth dependency declared on this handler.",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{inventory_base_url}}/inventory/:product_id",
+              "host": ["{{inventory_base_url}}"],
+              "path": ["inventory", ":product_id"],
+              "variable": [{ "key": "product_id", "value": "{{product_id}}" }]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Inventory",
+          "description": "POST /inventory. Body: InventoryCreate {product_id, sku, warehouse_location, available_quantity, safety_stock, reorder_threshold}. Auth: require_seller (SELLER or ADMIN).",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"product_id\": {{product_id}},\n  \"sku\": \"SKU-GAMING-WHEEL-001\",\n  \"warehouse_location\": \"DEFAULT\",\n  \"available_quantity\": 100,\n  \"safety_stock\": 10,\n  \"reorder_threshold\": 20\n}"
+            },
+            "url": { "raw": "{{inventory_base_url}}/inventory", "host": ["{{inventory_base_url}}"], "path": ["inventory"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Inventory Metadata",
+          "description": "PUT /inventory/{product_id}. Body: InventoryUpdate {sku?, warehouse_location?, safety_stock?, reorder_threshold?, version} (metadata only -- quantities are mutated exclusively via reserve/release/restock/adjust). Auth: require_seller (SELLER or ADMIN). Optimistic-locked via version (409 on mismatch).",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }] },
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"safety_stock\": 15,\n  \"reorder_threshold\": 25,\n  \"version\": 1\n}" },
+            "url": {
+              "raw": "{{inventory_base_url}}/inventory/:product_id",
+              "host": ["{{inventory_base_url}}"],
+              "path": ["inventory", ":product_id"],
+              "variable": [{ "key": "product_id", "value": "{{product_id}}" }]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Reserve Stock",
+          "description": "POST /inventory/{product_id}/reserve. Body: ReserveStockRequest {order_id, quantity}. Auth: require_seller (SELLER or ADMIN). Manual/ops override -- primary automatic path is the OrderCreated Kafka consumer. Idempotent per order_id.",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"order_id\": \"{{order_id}}\",\n  \"quantity\": 2\n}" },
+            "url": {
+              "raw": "{{inventory_base_url}}/inventory/:product_id/reserve",
+              "host": ["{{inventory_base_url}}"],
+              "path": ["inventory", ":product_id", "reserve"],
+              "variable": [{ "key": "product_id", "value": "{{product_id}}" }]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Release Reserved Stock",
+          "description": "POST /inventory/{product_id}/release. Body: ReleaseStockRequest {order_id}. Auth: require_seller (SELLER or ADMIN). Idempotent no-op if already released.",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"order_id\": \"{{order_id}}\"\n}" },
+            "url": {
+              "raw": "{{inventory_base_url}}/inventory/:product_id/release",
+              "host": ["{{inventory_base_url}}"],
+              "path": ["inventory", ":product_id", "release"],
+              "variable": [{ "key": "product_id", "value": "{{product_id}}" }]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Adjust Stock (manual correction)",
+          "description": "POST /inventory/{product_id}/adjust. Body: AdjustStockRequest {delta (signed int), reason}. Auth: require_admin (ADMIN only). Not for order flows -- stocktake/damage corrections.",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"delta\": -3,\n  \"reason\": \"Damaged in warehouse stocktake\"\n}" },
+            "url": {
+              "raw": "{{inventory_base_url}}/inventory/:product_id/adjust",
+              "host": ["{{inventory_base_url}}"],
+              "path": ["inventory", ":product_id", "adjust"],
+              "variable": [{ "key": "product_id", "value": "{{product_id}}" }]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Restock Product",
+          "description": "POST /inventory/{product_id}/restock. Body: RestockRequest {quantity (> 0)}. Auth: require_seller (SELLER or ADMIN).",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"quantity\": 50\n}" },
+            "url": {
+              "raw": "{{inventory_base_url}}/inventory/:product_id/restock",
+              "host": ["{{inventory_base_url}}"],
+              "path": ["inventory", ":product_id", "restock"],
+              "variable": [{ "key": "product_id", "value": "{{product_id}}" }]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Bulk Update Inventory (Admin)",
+          "description": "POST /admin/inventory/bulk-update. Body: BulkInventoryUpdate {items: [{product_id, safety_stock?, reorder_threshold?, warehouse_location?}]} (min 1 item). Auth: require_admin (ADMIN only). Each item is committed individually so one bad item doesn't roll back the batch.",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    { \"product_id\": {{product_id}}, \"reorder_threshold\": 25 },\n    { \"product_id\": 102, \"safety_stock\": 5 }\n  ]\n}"
+            },
+            "url": { "raw": "{{inventory_base_url}}/admin/inventory/bulk-update", "host": ["{{inventory_base_url}}"], "path": ["admin", "inventory", "bulk-update"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Inventory Health Report (Admin)",
+          "description": "GET /admin/inventory/health-report. Auth: require_admin (ADMIN only). Aggregate counts across the whole catalog; cached for a short TTL.",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }] },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{inventory_base_url}}/admin/inventory/health-report", "host": ["{{inventory_base_url}}"], "path": ["admin", "inventory", "health-report"] }
+          },
+          "response": []
+        },
+        {
+          "name": "[Internal] Get Inventory by Product",
+          "description": "GET /internal/inventory/{product_id}. internal_router (prefix /internal, include_in_schema=False) -- service-to-service stock lookup (future Order Service checkout-time check); not routable through the gateway. No auth dependency declared (only DbDep).",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{inventory_base_url}}/internal/inventory/:product_id",
+              "host": ["{{inventory_base_url}}"],
+              "path": ["internal", "inventory", ":product_id"],
+              "variable": [{ "key": "product_id", "value": "{{product_id}}" }]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{inventory_base_url}}/healthz", "host": ["{{inventory_base_url}}"], "path": ["healthz"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Readiness Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{inventory_base_url}}/readyz", "host": ["{{inventory_base_url}}"], "path": ["readyz"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Metrics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{inventory_base_url}}/metrics", "host": ["{{inventory_base_url}}"], "path": ["metrics"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Product Service",
+      "description": "services/product_service/src/product_service/api/routes.py: router (prefix /products, tags=[products]), admin_router (prefix /admin/products, tags=[admin]), internal_router (prefix /internal, include_in_schema=False, not gateway-routable). Called directly against {{product_base_url}}. require_seller = require_roles(get_current_user, Role.SELLER) (SELLER or ADMIN); require_admin = require_roles(get_current_user, Role.ADMIN) (ADMIN only). Public GET catalog endpoints only ever return PUBLISHED, non-deleted products.",
+      "item": [
+        {
+          "name": "List Products",
+          "description": "GET /products. Query: page, page_size, category, sub_category, brand, brand_id, category_id, min_price, max_price, sort (one of id, price, -price, rating, name, newest). No auth.",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{product_base_url}}/products?page=1&page_size=20",
+              "host": ["{{product_base_url}}"],
+              "path": ["products"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "page_size", "value": "20" },
+                { "key": "category", "value": "Gaming", "disabled": true },
+                { "key": "sub_category", "value": "Accessories", "disabled": true },
+                { "key": "brand", "value": "Ant Esports", "disabled": true },
+                { "key": "brand_id", "value": "7", "disabled": true },
+                { "key": "category_id", "value": "12", "disabled": true },
+                { "key": "min_price", "value": "10", "disabled": true },
+                { "key": "max_price", "value": "100", "disabled": true },
+                { "key": "sort", "value": "id", "disabled": true }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Brands",
+          "description": "GET /products/brands. No auth. Active brands only.",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{product_base_url}}/products/brands", "host": ["{{product_base_url}}"], "path": ["products", "brands"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Brand by ID",
+          "description": "GET /products/brands/{brand_id}. No auth.",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{product_base_url}}/products/brands/:brand_id",
+              "host": ["{{product_base_url}}"],
+              "path": ["products", "brands", ":brand_id"],
+              "variable": [{ "key": "brand_id", "value": "{{brand_id}}" }]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Manufacturers",
+          "description": "GET /products/manufacturers. No auth.",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{product_base_url}}/products/manufacturers", "host": ["{{product_base_url}}"], "path": ["products", "manufacturers"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Manufacturer by ID",
+          "description": "GET /products/manufacturers/{manufacturer_id}. No auth.",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{product_base_url}}/products/manufacturers/:manufacturer_id",
+              "host": ["{{product_base_url}}"],
+              "path": ["products", "manufacturers", ":manufacturer_id"],
+              "variable": [{ "key": "manufacturer_id", "value": "{{manufacturer_id}}" }]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Categories",
+          "description": "GET /products/categories?parent_id=. Query: parent_id (int, omit for top-level categories). No auth.",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{product_base_url}}/products/categories",
+              "host": ["{{product_base_url}}"],
+              "path": ["products", "categories"],
+              "query": [{ "key": "parent_id", "value": "{{category_id}}", "disabled": true }]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Category by ID",
+          "description": "GET /products/categories/{category_id}. No auth.",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{product_base_url}}/products/categories/:category_id",
+              "host": ["{{product_base_url}}"],
+              "path": ["products", "categories", ":category_id"],
+              "variable": [{ "key": "category_id", "value": "{{category_id}}" }]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Category Subtree",
+          "description": "GET /products/categories/{category_id}/subtree. No auth. Returns the category and all its descendants.",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{product_base_url}}/products/categories/:category_id/subtree",
+              "host": ["{{product_base_url}}"],
+              "path": ["products", "categories", ":category_id", "subtree"],
+              "variable": [{ "key": "category_id", "value": "{{category_id}}" }]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Tags",
+          "description": "GET /products/tags. No auth.",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{product_base_url}}/products/tags", "host": ["{{product_base_url}}"], "path": ["products", "tags"] }
+          },
+          "response": []
+        },
+        {
+          "name": "List Collections",
+          "description": "GET /products/collections. No auth. Active collections only.",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{product_base_url}}/products/collections", "host": ["{{product_base_url}}"], "path": ["products", "collections"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Collection by ID",
+          "description": "GET /products/collections/{collection_id}. No auth.",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{product_base_url}}/products/collections/:collection_id",
+              "host": ["{{product_base_url}}"],
+              "path": ["products", "collections", ":collection_id"],
+              "variable": [{ "key": "collection_id", "value": "{{collection_id}}" }]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Collection Products",
+          "description": "GET /products/collections/{collection_id}/products. Query: page, page_size. No auth. Only PUBLISHED, non-deleted products.",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{product_base_url}}/products/collections/:collection_id/products?page=1&page_size=20",
+              "host": ["{{product_base_url}}"],
+              "path": ["products", "collections", ":collection_id", "products"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "page_size", "value": "20" }
+              ],
+              "variable": [{ "key": "collection_id", "value": "{{collection_id}}" }]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Product Attributes",
+          "description": "GET /products/attributes. No auth.",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{product_base_url}}/products/attributes", "host": ["{{product_base_url}}"], "path": ["products", "attributes"] }
+          },
+          "response": []
+        },
+        {
+          "name": "List Attribute Values",
+          "description": "GET /products/attributes/{attribute_id}/values. No auth.",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{product_base_url}}/products/attributes/:attribute_id/values",
+              "host": ["{{product_base_url}}"],
+              "path": ["products", "attributes", ":attribute_id", "values"],
+              "variable": [{ "key": "attribute_id", "value": "{{attribute_id}}" }]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Product by ID",
+          "description": "GET /products/{product_id}. No auth. Public read path -- 404s unless the product is PUBLISHED and not soft-deleted.",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{product_base_url}}/products/:product_id",
+              "host": ["{{product_base_url}}"],
+              "path": ["products", ":product_id"],
+              "variable": [{ "key": "product_id", "value": "{{product_id}}" }]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Product",
+          "description": "POST /products. Body: ProductCreate {title, slug?, uniq_id?, product_url?, retail_price?, discount?, image_urls?, description?, category?, sub_category?, brand?, brand_id?, manufacturer_id?, category_id?, seo_title?, seo_description?, canonical_url?, meta_keywords?, attributes?}. Auth: require_seller (SELLER or ADMIN). Creates a product owned by the calling seller.",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Ant Esports GW180 Corsa Gaming Racing Wheel\",\n  \"retail_price\": 89.99,\n  \"discount\": 10.00,\n  \"description\": \"Force-feedback racing wheel with pedals.\",\n  \"category\": \"Gaming\",\n  \"sub_category\": \"Accessories\",\n  \"brand\": \"Ant Esports\",\n  \"brand_id\": 7,\n  \"manufacturer_id\": 3,\n  \"category_id\": 12,\n  \"seo_title\": \"Ant Esports GW180 Corsa Racing Wheel | Buy Online\",\n  \"seo_description\": \"Force-feedback racing wheel with pedals, best price guaranteed.\",\n  \"meta_keywords\": [\"racing wheel\", \"gaming accessories\"],\n  \"attributes\": { \"connector\": \"USB-A\" }\n}"
+            },
+            "url": { "raw": "{{product_base_url}}/products", "host": ["{{product_base_url}}"], "path": ["products"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Product",
+          "description": "PUT /products/{product_id}. Body: ProductUpdate (all fields optional, same shape as ProductCreate minus uniq_id). Auth: require_seller (SELLER can only modify own products; ADMIN can modify any).",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }] },
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"retail_price\": 79.99,\n  \"discount\": 15.00\n}" },
+            "url": {
+              "raw": "{{product_base_url}}/products/:product_id",
+              "host": ["{{product_base_url}}"],
+              "path": ["products", ":product_id"],
+              "variable": [{ "key": "product_id", "value": "{{product_id}}" }]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Product",
+          "description": "DELETE /products/{product_id}. Auth: require_seller (SELLER can only delete own products; ADMIN can delete any). Soft-delete: row is kept, is_deleted=true.",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }] },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{product_base_url}}/products/:product_id",
+              "host": ["{{product_base_url}}"],
+              "path": ["products", ":product_id"],
+              "variable": [{ "key": "product_id", "value": "{{product_id}}" }]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Product Variants",
+          "description": "GET /products/{product_id}/variants. No auth.",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{product_base_url}}/products/:product_id/variants",
+              "host": ["{{product_base_url}}"],
+              "path": ["products", ":product_id", "variants"],
+              "variable": [{ "key": "product_id", "value": "{{product_id}}" }]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Product Variant",
+          "description": "GET /products/{product_id}/variants/{variant_id}. No auth.",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{product_base_url}}/products/:product_id/variants/:variant_id",
+              "host": ["{{product_base_url}}"],
+              "path": ["products", ":product_id", "variants", ":variant_id"],
+              "variable": [
+                { "key": "product_id", "value": "{{product_id}}" },
+                { "key": "variant_id", "value": "{{variant_id}}" }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Product Variant",
+          "description": "POST /products/{product_id}/variants. Body: ProductVariantCreate {variant_name, barcode?, upc?, ean?, hsn_code?, gst_category?, country_of_origin?, weight_grams?, length_mm?, width_mm?, height_mm?, fragile?, shipping_class?, manufacturer_warranty_months?, serial_number_required?, expiry_tracked?, attributes?, is_default?, status? (ACTIVE default), attribute_value_ids?}. Auth: require_seller (owning seller or ADMIN).",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"variant_name\": \"Ant Esports GW180 - Black\",\n  \"barcode\": \"8901234567890\",\n  \"weight_grams\": 1200,\n  \"fragile\": false,\n  \"is_default\": true,\n  \"status\": \"ACTIVE\",\n  \"attributes\": { \"color\": \"black\" },\n  \"attribute_value_ids\": []\n}"
+            },
+            "url": {
+              "raw": "{{product_base_url}}/products/:product_id/variants",
+              "host": ["{{product_base_url}}"],
+              "path": ["products", ":product_id", "variants"],
+              "variable": [{ "key": "product_id", "value": "{{product_id}}" }]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Product Variant",
+          "description": "PUT /products/{product_id}/variants/{variant_id}. Body: ProductVariantUpdate (all fields optional, same shape as ProductVariantCreate minus attribute_value_ids). Auth: require_seller (owning seller or ADMIN).",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }] },
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"weight_grams\": 1250,\n  \"status\": \"ACTIVE\"\n}" },
+            "url": {
+              "raw": "{{product_base_url}}/products/:product_id/variants/:variant_id",
+              "host": ["{{product_base_url}}"],
+              "path": ["products", ":product_id", "variants", ":variant_id"],
+              "variable": [
+                { "key": "product_id", "value": "{{product_id}}" },
+                { "key": "variant_id", "value": "{{variant_id}}" }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Product Variant",
+          "description": "DELETE /products/{product_id}/variants/{variant_id}. Auth: require_seller (owning seller or ADMIN).",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }] },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{product_base_url}}/products/:product_id/variants/:variant_id",
+              "host": ["{{product_base_url}}"],
+              "path": ["products", ":product_id", "variants", ":variant_id"],
+              "variable": [
+                { "key": "product_id", "value": "{{product_id}}" },
+                { "key": "variant_id", "value": "{{variant_id}}" }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Product Images",
+          "description": "GET /products/{product_id}/images. No auth.",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{product_base_url}}/products/:product_id/images",
+              "host": ["{{product_base_url}}"],
+              "path": ["products", ":product_id", "images"],
+              "variable": [{ "key": "product_id", "value": "{{product_id}}" }]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Product Image",
+          "description": "POST /products/{product_id}/images. Body: ProductImageCreate {variant_id?, kind? (GALLERY default), url, video_url?, alt_text?, sort_order?}. Auth: require_seller (owning seller or ADMIN). Only one PRIMARY image allowed per product/variant.",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"kind\": \"PRIMARY\",\n  \"url\": \"https://cdn.example.com/products/101/main.jpg\",\n  \"alt_text\": \"Ant Esports GW180 Corsa Racing Wheel\",\n  \"sort_order\": 0\n}"
+            },
+            "url": {
+              "raw": "{{product_base_url}}/products/:product_id/images",
+              "host": ["{{product_base_url}}"],
+              "path": ["products", ":product_id", "images"],
+              "variable": [{ "key": "product_id", "value": "{{product_id}}" }]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Product Image",
+          "description": "DELETE /products/{product_id}/images/{image_id}. Auth: require_seller (owning seller or ADMIN).",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }] },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{product_base_url}}/products/:product_id/images/:image_id",
+              "host": ["{{product_base_url}}"],
+              "path": ["products", ":product_id", "images", ":image_id"],
+              "variable": [
+                { "key": "product_id", "value": "{{product_id}}" },
+                { "key": "image_id", "value": "{{image_id}}" }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Seed Products from CSV (Admin)",
+          "description": "POST /admin/products/seed. No body. dependencies=[Depends(require_admin)] -- ADMIN only. Reads settings.seed_csv_path server-side; returns a 'seeding disabled' message if not configured.",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [],
+            "url": { "raw": "{{product_base_url}}/admin/products/seed", "host": ["{{product_base_url}}"], "path": ["admin", "products", "seed"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Brand (Admin)",
+          "description": "POST /admin/products/brands. Body: BrandCreate {name, slug, logo_url?, manufacturer_id?, description?, is_active? (true default)}. ADMIN only.",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Ant Esports\",\n  \"slug\": \"ant-esports\",\n  \"manufacturer_id\": {{manufacturer_id}},\n  \"description\": \"Gaming peripherals brand\",\n  \"is_active\": true\n}"
+            },
+            "url": { "raw": "{{product_base_url}}/admin/products/brands", "host": ["{{product_base_url}}"], "path": ["admin", "products", "brands"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Brand (Admin)",
+          "description": "PUT /admin/products/brands/{brand_id}. Body: BrandUpdate (all fields optional, same shape as BrandCreate). ADMIN only.",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }] },
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"description\": \"Updated brand description\",\n  \"is_active\": true\n}" },
+            "url": {
+              "raw": "{{product_base_url}}/admin/products/brands/:brand_id",
+              "host": ["{{product_base_url}}"],
+              "path": ["admin", "products", "brands", ":brand_id"],
+              "variable": [{ "key": "brand_id", "value": "{{brand_id}}" }]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Brand (Admin)",
+          "description": "DELETE /admin/products/brands/{brand_id}. ADMIN only. 409 if still referenced by products.",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }] },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{product_base_url}}/admin/products/brands/:brand_id",
+              "host": ["{{product_base_url}}"],
+              "path": ["admin", "products", "brands", ":brand_id"],
+              "variable": [{ "key": "brand_id", "value": "{{brand_id}}" }]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Manufacturer (Admin)",
+          "description": "POST /admin/products/manufacturers. Body: ManufacturerCreate {name, country_of_origin? (2-letter), contact_info?}. ADMIN only.",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Ant Esports Manufacturing\",\n  \"country_of_origin\": \"IN\",\n  \"contact_info\": { \"email\": \"support@antesports.example\" }\n}"
+            },
+            "url": { "raw": "{{product_base_url}}/admin/products/manufacturers", "host": ["{{product_base_url}}"], "path": ["admin", "products", "manufacturers"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Manufacturer (Admin)",
+          "description": "PUT /admin/products/manufacturers/{manufacturer_id}. Body: ManufacturerUpdate (all fields optional). ADMIN only.",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }] },
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"country_of_origin\": \"IN\"\n}" },
+            "url": {
+              "raw": "{{product_base_url}}/admin/products/manufacturers/:manufacturer_id",
+              "host": ["{{product_base_url}}"],
+              "path": ["admin", "products", "manufacturers", ":manufacturer_id"],
+              "variable": [{ "key": "manufacturer_id", "value": "{{manufacturer_id}}" }]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Manufacturer (Admin)",
+          "description": "DELETE /admin/products/manufacturers/{manufacturer_id}. ADMIN only. 409 if referenced by brands or products.",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }] },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{product_base_url}}/admin/products/manufacturers/:manufacturer_id",
+              "host": ["{{product_base_url}}"],
+              "path": ["admin", "products", "manufacturers", ":manufacturer_id"],
+              "variable": [{ "key": "manufacturer_id", "value": "{{manufacturer_id}}" }]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Category (Admin)",
+          "description": "POST /admin/products/categories. Body: CategoryCreate {name, parent_id?, sort_order? (0 default)}. ADMIN only. Server computes slug/path/depth.",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Gaming Accessories\",\n  \"parent_id\": null,\n  \"sort_order\": 0\n}" },
+            "url": { "raw": "{{product_base_url}}/admin/products/categories", "host": ["{{product_base_url}}"], "path": ["admin", "products", "categories"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Category (Admin)",
+          "description": "PUT /admin/products/categories/{category_id}. Body: CategoryUpdate {is_active?, sort_order?} -- deliberately minimal; renaming/re-parenting is out of scope. ADMIN only.",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }] },
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"is_active\": true,\n  \"sort_order\": 1\n}" },
+            "url": {
+              "raw": "{{product_base_url}}/admin/products/categories/:category_id",
+              "host": ["{{product_base_url}}"],
+              "path": ["admin", "products", "categories", ":category_id"],
+              "variable": [{ "key": "category_id", "value": "{{category_id}}" }]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Category (Admin)",
+          "description": "DELETE /admin/products/categories/{category_id}. ADMIN only. 409 if it has child categories or referencing products.",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }] },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{product_base_url}}/admin/products/categories/:category_id",
+              "host": ["{{product_base_url}}"],
+              "path": ["admin", "products", "categories", ":category_id"],
+              "variable": [{ "key": "category_id", "value": "{{category_id}}" }]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Tag (Admin)",
+          "description": "POST /admin/products/tags. Body: TagCreate {name, slug}. ADMIN only.",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Best Seller\",\n  \"slug\": \"best-seller\"\n}" },
+            "url": { "raw": "{{product_base_url}}/admin/products/tags", "host": ["{{product_base_url}}"], "path": ["admin", "products", "tags"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Tag (Admin)",
+          "description": "DELETE /admin/products/tags/{tag_id}. ADMIN only. 409 if still applied to products.",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }] },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{product_base_url}}/admin/products/tags/:tag_id",
+              "host": ["{{product_base_url}}"],
+              "path": ["admin", "products", "tags", ":tag_id"],
+              "variable": [{ "key": "tag_id", "value": "{{tag_id}}" }]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Collection (Admin)",
+          "description": "POST /admin/products/collections. Body: CollectionCreate {name, slug, description?, is_active? (true default), starts_at?, ends_at?}. ADMIN only.",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Summer Gaming Sale\",\n  \"slug\": \"summer-gaming-sale\",\n  \"description\": \"Seasonal gaming gear promotion\",\n  \"is_active\": true,\n  \"starts_at\": \"2026-06-01T00:00:00Z\",\n  \"ends_at\": \"2026-08-31T23:59:59Z\"\n}"
+            },
+            "url": { "raw": "{{product_base_url}}/admin/products/collections", "host": ["{{product_base_url}}"], "path": ["admin", "products", "collections"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Collection (Admin)",
+          "description": "PUT /admin/products/collections/{collection_id}. Body: CollectionUpdate (all fields optional). ADMIN only.",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }] },
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"is_active\": false\n}" },
+            "url": {
+              "raw": "{{product_base_url}}/admin/products/collections/:collection_id",
+              "host": ["{{product_base_url}}"],
+              "path": ["admin", "products", "collections", ":collection_id"],
+              "variable": [{ "key": "collection_id", "value": "{{collection_id}}" }]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Collection (Admin)",
+          "description": "DELETE /admin/products/collections/{collection_id}. ADMIN only. 409 if it still has products linked.",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }] },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{product_base_url}}/admin/products/collections/:collection_id",
+              "host": ["{{product_base_url}}"],
+              "path": ["admin", "products", "collections", ":collection_id"],
+              "variable": [{ "key": "collection_id", "value": "{{collection_id}}" }]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Add Product to Collection (Admin)",
+          "description": "POST /admin/products/collections/{collection_id}/products/{product_id}. No body. ADMIN only. 409 if already in the collection.",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{product_base_url}}/admin/products/collections/:collection_id/products/:product_id",
+              "host": ["{{product_base_url}}"],
+              "path": ["admin", "products", "collections", ":collection_id", "products", ":product_id"],
+              "variable": [
+                { "key": "collection_id", "value": "{{collection_id}}" },
+                { "key": "product_id", "value": "{{product_id}}" }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Remove Product from Collection (Admin)",
+          "description": "DELETE /admin/products/collections/{collection_id}/products/{product_id}. No body. ADMIN only.",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }] },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{product_base_url}}/admin/products/collections/:collection_id/products/:product_id",
+              "host": ["{{product_base_url}}"],
+              "path": ["admin", "products", "collections", ":collection_id", "products", ":product_id"],
+              "variable": [
+                { "key": "collection_id", "value": "{{collection_id}}" },
+                { "key": "product_id", "value": "{{product_id}}" }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Product Attribute (Admin)",
+          "description": "POST /admin/products/attributes. Body: ProductAttributeCreate {name, code, is_variant_defining? (false default), sort_order? (0 default)}. ADMIN only.",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Color\",\n  \"code\": \"color\",\n  \"is_variant_defining\": true,\n  \"sort_order\": 0\n}"
+            },
+            "url": { "raw": "{{product_base_url}}/admin/products/attributes", "host": ["{{product_base_url}}"], "path": ["admin", "products", "attributes"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Attribute Value (Admin)",
+          "description": "POST /admin/products/attributes/{attribute_id}/values. Body: AttributeValueCreate {value, slug? (server-generated from value if omitted), sort_order? (0 default)}. ADMIN only.",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"value\": \"Black\",\n  \"sort_order\": 0\n}" },
+            "url": {
+              "raw": "{{product_base_url}}/admin/products/attributes/:attribute_id/values",
+              "host": ["{{product_base_url}}"],
+              "path": ["admin", "products", "attributes", ":attribute_id", "values"],
+              "variable": [{ "key": "attribute_id", "value": "{{attribute_id}}" }]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "[Internal] Get Product by ID",
+          "description": "GET /internal/products/{product_id}. internal_router (prefix /internal, include_in_schema=False) -- service-to-service lookup (cart price snapshots, search backfill); not routable through the gateway. No auth dependency declared (only DbDep). Unlike the public endpoint, this can see non-PUBLISHED products (not soft-deleted).",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{product_base_url}}/internal/products/:product_id",
+              "host": ["{{product_base_url}}"],
+              "path": ["internal", "products", ":product_id"],
+              "variable": [{ "key": "product_id", "value": "{{product_id}}" }]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "[Internal] List Products",
+          "description": "GET /internal/products. Query: page, page_size. internal_router -- paged catalog dump for the search-service backfill; sees every non-deleted product regardless of lifecycle status. No auth dependency declared.",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{product_base_url}}/internal/products?page=1&page_size=20",
+              "host": ["{{product_base_url}}"],
+              "path": ["internal", "products"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "page_size", "value": "20" }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{product_base_url}}/healthz", "host": ["{{product_base_url}}"], "path": ["healthz"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Readiness Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{product_base_url}}/readyz", "host": ["{{product_base_url}}"], "path": ["readyz"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Metrics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{product_base_url}}/metrics", "host": ["{{product_base_url}}"], "path": ["metrics"] }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

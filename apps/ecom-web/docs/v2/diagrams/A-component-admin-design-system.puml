@@ -1,0 +1,101 @@
+@startuml A-component-admin-design-system
+title Admin Design-System Layer — Component Dependencies
+
+skinparam componentStyle rectangle
+skinparam shadowing false
+skinparam defaultTextAlignment center
+
+package "Admin Pages" {
+  [AdminProductsPage\n(server mode)] as APP
+  [AdminInventoryListPage\n(server mode)] as AILP
+  [AdminBrandsPage\n(client mode)] as ABP
+  [AdminManufacturersPage\n(client mode)] as AMP
+  [AdminTagsPage\n(client mode)] as ATP
+}
+[Storefront ProductsPage] as SFP
+
+package "Composables" {
+  [useListController<T>\nowns list + query state] as ULC
+  [useClientList<T>\nowns filter/sort/paginate] as UCL
+  [useFormErrors + validators] as UFE
+}
+
+interface "ListControllerResult<T>\nSEAM: mode-agnostic contract" as LCR
+
+package "Components" {
+  [DataTable] as DT
+  [AdminTableToolbar\n(slotted)] as ATT
+  [PaginationComponent\n(now decoupled)] as PG
+  [ConfirmDialog] as CD
+  [AppImage / resolveImageUrl] as AI
+  package "DataTable internal states" {
+    [SkeletonTable] as ST
+    [EmptyState] as ES
+    [ErrorState] as ERS
+  }
+}
+
+package "Stores (mutations only)" {
+  [product store] as PS
+  [inventory store] as IS
+  [brand store] as BS
+  [manufacturer store] as MS
+  [tag store] as TS
+}
+
+package "API clients" {
+  [ProductsApi] as PAPI
+  [InventoryApi] as IAPI
+  [BrandsApi] as BAPI
+  [ManufacturersApi] as MAPI
+  [TagsApi] as TAPI
+}
+
+' Server pages -> controller -> api
+APP --> ULC : list/query state
+AILP --> ULC : list/query state
+ULC --> PAPI : fetcher(query, signal)
+ULC --> IAPI : fetcher(query, signal)
+APP ..> PS : mutations only\n(create/update/delete)
+AILP ..> IS : mutations only
+
+' Client pages -> useClientList -> store source
+ABP --> UCL : list view
+AMP --> UCL : list view
+ATP --> UCL : list view
+UCL --> BS : source[] + onRefresh
+UCL --> MS : source[] + onRefresh
+UCL --> TS : source[] + onRefresh
+
+' Both composables produce the seam
+ULC ==> LCR : returns
+UCL ==> LCR : returns
+LCR ==> DT : consumed by
+
+' DataTable internals
+DT --> ST
+DT --> ES
+DT --> ERS
+DT --> PG
+DT --> ATT : toolbar slot
+
+' Shared pagination
+SFP --> PG : reuses\n(decoupled from useProductStore)
+
+' Cross-cutting
+APP --> CD : delete flow
+AILP --> CD : delete flow
+ABP --> CD
+AMP --> CD
+ATP --> CD
+APP --> UFE : forms
+ABP --> UFE : forms
+DT --> AI : row images
+
+note bottom of LCR
+  The ListControllerResult<T> seam is the boundary that
+  makes DataTable mode-agnostic. Controllers own
+  list/query state; stores own mutations only.
+end note
+
+@enduml

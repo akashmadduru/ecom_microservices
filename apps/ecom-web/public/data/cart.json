@@ -1,0 +1,16 @@
+[
+  {
+    "id": 1,
+    "product_name": "Aurora Noise Cancelling Headphones",
+    "retail_price": 129,
+    "quantity": 1,
+    "image_urls": "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=800&q=80"
+  },
+  {
+    "id": 3,
+    "product_name": "Cove Portable Speaker",
+    "retail_price": 89,
+    "quantity": 2,
+    "image_urls": "https://images.unsplash.com/photo-1608043152269-423dbba4e7e1?auto=format&fit=crop&w=800&q=80"
+  }
+]

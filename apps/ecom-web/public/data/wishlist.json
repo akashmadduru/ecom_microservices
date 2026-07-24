@@ -1,0 +1,14 @@
+[
+  {
+    "id": 2,
+    "product_name": "Lumen Smart Watch",
+    "retail_price": 199,
+    "image_urls": "https://images.unsplash.com/photo-1546868871-7041f2a55e12?auto=format&fit=crop&w=800&q=80"
+  },
+  {
+    "id": 8,
+    "product_name": "Pico Mini Camera",
+    "retail_price": 249,
+    "image_urls": "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?auto=format&fit=crop&w=800&q=80"
+  }
+]

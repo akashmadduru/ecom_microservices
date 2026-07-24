@@ -1,0 +1,100 @@
+%% Admin Design-System Layer — Component Dependencies
+%% Seam: ListControllerResult<T> makes DataTable mode-agnostic.
+%% Stores own MUTATIONS only; controllers own LIST/QUERY state.
+flowchart TB
+  classDef page fill:#1e3a5f,stroke:#4a90d9,color:#fff
+  classDef comp fill:#2d4a2b,stroke:#6bbf59,color:#fff
+  classDef composable fill:#4a2d5f,stroke:#a86bd9,color:#fff
+  classDef store fill:#5f3a1e,stroke:#d99a4a,color:#fff
+  classDef api fill:#5f1e3a,stroke:#d94a90,color:#fff
+  classDef seam fill:#3a3a3a,stroke:#f5c518,color:#f5c518,stroke-width:3px
+
+  %% ---------- Pages ----------
+  subgraph Pages["Admin Pages"]
+    APP["AdminProductsPage<br/>(server mode)"]:::page
+    AILP["AdminInventoryListPage<br/>(server mode)"]:::page
+    ABP["AdminBrandsPage<br/>(client mode)"]:::page
+    AMP["AdminManufacturersPage<br/>(client mode)"]:::page
+    ATP["AdminTagsPage<br/>(client mode)"]:::page
+  end
+  SFP["Storefront ProductsPage"]:::page
+
+  %% ---------- Composables ----------
+  ULC["useListController&lt;T&gt;<br/>owns list + query state"]:::composable
+  UCL["useClientList&lt;T&gt;<br/>owns filter/sort/paginate"]:::composable
+  UFE["useFormErrors + validators"]:::composable
+
+  %% ---------- Seam ----------
+  LCR{{"ListControllerResult&lt;T&gt;<br/>SEAM — mode-agnostic contract"}}:::seam
+
+  %% ---------- Components ----------
+  DT["DataTable"]:::comp
+  ATT["AdminTableToolbar<br/>(slotted)"]:::comp
+  PG["PaginationComponent<br/>(now decoupled)"]:::comp
+  CD["ConfirmDialog"]:::comp
+  AI["AppImage / resolveImageUrl"]:::comp
+  subgraph StateComps["DataTable internal states"]
+    ST["SkeletonTable"]:::comp
+    ES["EmptyState"]:::comp
+    ERS["ErrorState"]:::comp
+  end
+
+  %% ---------- Stores ----------
+  subgraph Stores["Stores (mutations only)"]
+    PS["product store"]:::store
+    IS["inventory store"]:::store
+    BS["brand store"]:::store
+    MS["manufacturer store"]:::store
+    TS["tag store"]:::store
+  end
+
+  %% ---------- API clients ----------
+  subgraph APIs["API clients"]
+    PAPI["ProductsApi"]:::api
+    IAPI["InventoryApi"]:::api
+    BAPI["BrandsApi"]:::api
+    MAPI["ManufacturersApi"]:::api
+    TAPI["TagsApi"]:::api
+  end
+
+  %% ---- Server pages -> controller -> api ----
+  APP -->|"list/query state"| ULC
+  AILP -->|"list/query state"| ULC
+  ULC -->|"fetcher(query, signal)"| PAPI
+  ULC -->|"fetcher(query, signal)"| IAPI
+  PAPI --> BAPI
+  APP -.->|"mutations only<br/>(create/update/delete)"| PS
+  AILP -.->|"mutations only"| IS
+
+  %% ---- Client pages -> useClientList -> store source ----
+  ABP -->|"list view"| UCL
+  AMP -->|"list view"| UCL
+  ATP -->|"list view"| UCL
+  UCL -->|"source[] + onRefresh"| BS
+  UCL -->|"source[] + onRefresh"| MS
+  UCL -->|"source[] + onRefresh"| TS
+
+  %% ---- Both composables produce the seam ----
+  ULC ==>|"returns"| LCR
+  UCL ==>|"returns"| LCR
+  LCR ==>|"consumed by"| DT
+
+  %% ---- DataTable internals ----
+  DT --> ST
+  DT --> ES
+  DT --> ERS
+  DT --> PG
+  DT -->|"toolbar slot"| ATT
+
+  %% ---- Shared pagination ----
+  SFP -->|"reuses (decoupled from<br/>useProductStore)"| PG
+
+  %% ---- Cross-cutting ----
+  APP -->|"delete flow"| CD
+  AILP -->|"delete flow"| CD
+  ABP --> CD
+  AMP --> CD
+  ATP --> CD
+  APP -->|"forms"| UFE
+  ABP -->|"forms"| UFE
+  DT -->|"row images"| AI

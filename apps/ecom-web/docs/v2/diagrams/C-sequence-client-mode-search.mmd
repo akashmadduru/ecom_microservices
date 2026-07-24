@@ -1,0 +1,37 @@
+%% Client-mode search + pagination (useClientList)
+sequenceDiagram
+    autonumber
+    actor User as Admin User
+    participant Toolbar as AdminTableToolbar
+    participant List as useClientList
+    participant Src as reactive source[]<br/>(brand/mfr/tag store)
+    participant Pipe as computed pipeline<br/>filter → sort → paginate
+    participant DT as DataTable
+
+    Note over User,DT: INITIAL LOAD (source owned by store)
+    List->>Src: onMounted → store.fetch*()
+    activate Src
+    Src-->>List: loading / error (passthrough refs,<br/>originate in the store, NOT the composable)
+    Src->>Src: source[] populated
+    deactivate Src
+    Src-->>Pipe: source[] reactive dependency
+    Pipe-->>DT: initial page rendered
+
+    Note over User,DT: SEARCH PATH (debounced, in-memory)
+    User->>Toolbar: keystroke
+    Toolbar->>List: setSearch(term)
+    List->>List: search.value = term
+    Note right of List: debounce 200ms
+    List->>Pipe: invalidate computed
+    activate Pipe
+    Pipe->>Pipe: 1. filter by searchFields<br/>2. apply filterPredicates<br/>3. sort<br/>4. slice for current page
+    Pipe->>Pipe: pagination = buildPagination()<br/>(shared util)
+    Pipe-->>DT: re-render (no network call)
+    deactivate Pipe
+
+    Note over User,DT: PAGINATION PATH (immediate, in-memory)
+    User->>Toolbar: click page n
+    Toolbar->>List: setPage(n)
+    List->>Pipe: page changed → recompute slice only
+    Pipe->>Pipe: slice for page n<br/>(filter/sort already memoized)
+    Pipe-->>DT: re-render (NO network call)

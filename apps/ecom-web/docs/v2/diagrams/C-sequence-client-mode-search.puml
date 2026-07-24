@@ -1,0 +1,40 @@
+@startuml C-sequence-client-mode-search
+title Client-mode search + pagination (useClientList)
+autonumber
+
+actor "Admin User" as User
+participant "AdminTableToolbar" as Toolbar
+participant "useClientList" as List
+participant "reactive source[]\n(brand/mfr/tag store)" as Src
+participant "computed pipeline\nfilter -> sort -> paginate" as Pipe
+participant "DataTable" as DT
+
+== INITIAL LOAD (source owned by store) ==
+List -> Src : onMounted -> store.fetch*()
+activate Src
+Src --> List : loading / error (passthrough refs,\noriginate in the store, NOT the composable)
+Src -> Src : source[] populated
+deactivate Src
+Src --> Pipe : source[] reactive dependency
+Pipe --> DT : initial page rendered
+
+== SEARCH PATH (debounced, in-memory) ==
+User -> Toolbar : keystroke
+Toolbar -> List : setSearch(term)
+List -> List : search.value = term
+note right of List : debounce 200ms
+List -> Pipe : invalidate computed
+activate Pipe
+Pipe -> Pipe : 1. filter by searchFields\n2. apply filterPredicates\n3. sort\n4. slice for current page
+Pipe -> Pipe : pagination = buildPagination()\n(shared util)
+Pipe --> DT : re-render (no network call)
+deactivate Pipe
+
+== PAGINATION PATH (immediate, in-memory) ==
+User -> Toolbar : click page n
+Toolbar -> List : setPage(n)
+List -> Pipe : page changed -> recompute slice only
+Pipe -> Pipe : slice for page n\n(filter/sort already memoized)
+Pipe --> DT : re-render (NO network call)
+
+@enduml

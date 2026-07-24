@@ -1,0 +1,33 @@
+%% ProductsPage filter sidebar composition (category tree + brand panel)
+%% Renders with: npx @mermaid-js/mermaid-cli -i component-products-page-filters.mmd -o component-products-page-filters.svg
+flowchart TD
+    subgraph New["New - src/components/products/"]
+        CTF["CategoryTreeFilter.vue"]
+        BFS["BrandFilterScroller.vue"]
+    end
+
+    Page["ProductsPage.vue"]
+    CatStore[("useCategoryStore (Pinia)")]
+    CatApi["CategoriesApi"]
+    BrandStore[("useBrandStore (Pinia)")]
+    BrandApi["BrandsApi"]
+
+    subgraph Existing["Existing - unchanged, shown for context"]
+        Ctrl["useListController"]
+        ProdApi["ProductsApi.getProducts"]
+    end
+
+    Page -->|renders| CTF
+    Page -->|renders| BFS
+
+    CTF -->|depends on| CatStore
+    CatStore -->|calls| CatApi
+
+    BFS -->|depends on| BrandStore
+    BrandStore -->|calls| BrandApi
+
+    Page -->|depends on| Ctrl
+    Ctrl -->|calls| ProdApi
+
+    CTF -.->|"v-model update:modelValue\n(category_id: number | null)"| Page
+    BFS -.->|"v-model update:modelValue\n(brand_id: number | null)"| Page
