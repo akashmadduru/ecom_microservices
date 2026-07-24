@@ -1,6 +1,6 @@
 # Ecom Microservices
 
-A FastAPI-based e-commerce platform, built as a `uv` workspace monorepo. Services are added phase by phase; each is independently deployable, owns its own Postgres database, and integrates with the others over Kafka events and a thin API gateway. The Vue/Nuxt frontends (`vue/`) live in the same repo but are otherwise fully independent — they talk to the backend exclusively through the API gateway (except `ops-dashboard`, which talks to Docker/Kubernetes instead) and each has its own CI pipeline.
+A FastAPI-based e-commerce platform, built as a `uv` workspace monorepo. Services are added phase by phase; each is independently deployable, owns its own Postgres database, and integrates with the others over Kafka events and a thin API gateway. The Vue/Nuxt frontends (`vue/`, `nuxt/`) live in the same repo but are otherwise fully independent — they talk to the backend exclusively through the API gateway (except `ops-dashboard`, which talks to Docker/Kubernetes instead) and each has its own CI pipeline.
 
 ## Repository layout
 
@@ -12,14 +12,15 @@ ecom_microservices/
 │   │   ├── ecom-web/           Customer-facing storefront — Vue 3 + TS, own Dockerfile
 │   │   └── ecom-admin/         Internal admin console (products, inventory, brands,
 │   │                              manufacturers, tags) — Vue 3 + TS, own Dockerfile
-│   ├── packages/
-│   │   ├── core/                Shared API/client layer (axios) consumed by both apps
-│   │   └── lib/                 Shared Vue components/composables (depends on core)
+│   └── packages/
+│       ├── core/                Shared API/client layer (axios) consumed by both apps
+│       └── lib/                 Shared Vue components/composables (depends on core)
+├── nuxt/
 │   └── ops-dashboard/         Standalone Nuxt 4 observability dashboard for local Docker
 │                                 containers or a Kubernetes cluster (read-only by default;
 │                                 opt-in gated mutations) — self-contained, own
-│                                 package.json/package-lock.json, not part of the npm
-│                                 workspace above, has its own k8s/ RBAC manifests
+│                                 package.json/package-lock.json, no dependency on vue/,
+│                                 has its own k8s/ RBAC manifests
 ├── python/                  All Python packages — own pyproject.toml/uv.lock (uv workspace
 │   │                        root), mirrors vue/'s self-contained shape
 │   ├── pyproject.toml
@@ -38,7 +39,7 @@ ecom_microservices/
 └── .github/workflows/        One CI pipeline per component — see "CI/CD" below
 ```
 
-Each component builds, lints, and tests **independently** — a change confined to one component's directory never triggers another component's pipeline. Two exceptions: `python/libs/ecom_common` triggers all 4 Python services' pipelines (never the frontend's), since every Python service depends on it; and `vue/packages/core`/`vue/packages/lib` each trigger both `ecom-web` and `ecom-admin` (never `ops-dashboard`, which doesn't depend on them). Every `uv` command targets the `python/` workspace explicitly (`uv --directory python ...`, or `cd python` first) — nothing Python-related lives at the repo root. Similarly, `vue/apps/*` and `vue/packages/*` are an npm workspace rooted at `vue/`, while `vue/ops-dashboard` is deliberately excluded from it and can be copied out of the repo standalone.
+Each component builds, lints, and tests **independently** — a change confined to one component's directory never triggers another component's pipeline. Two exceptions: `python/libs/ecom_common` triggers all 4 Python services' pipelines (never the frontend's), since every Python service depends on it; and `vue/packages/core`/`vue/packages/lib` each trigger both `ecom-web` and `ecom-admin`. Every `uv` command targets the `python/` workspace explicitly (`uv --directory python ...`, or `cd python` first) — nothing Python-related lives at the repo root. Similarly, `vue/apps/*` and `vue/packages/*` are an npm workspace rooted at `vue/`; `ops-dashboard` lives outside it entirely (under `nuxt/`, not `vue/`) and can be copied out of the repo standalone.
 
 ## CI/CD
 
