@@ -51,10 +51,7 @@ export function useConfirmAction<T>(
     deleting.value = true
     try {
       await options.perform(row)
-      notificationStore.showToast(
-        options.successMessage?.(label) ?? `Deleted ${label}.`,
-        'success',
-      )
+      notificationStore.showToast(options.successMessage?.(label) ?? `Deleted ${label}.`, 'success')
       await options.onSuccess?.(row)
       confirmOpen.value = false
       pendingDelete.value = null

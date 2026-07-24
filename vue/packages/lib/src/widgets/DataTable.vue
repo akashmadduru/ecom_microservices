@@ -45,9 +45,7 @@ function cellClassFor(column: DataTableColumn<T>, row: T): string {
   return column.cellClass ?? ''
 }
 
-const showTable = computed(
-  () => !['error', 'empty'].includes(props.controller.status.value),
-)
+const showTable = computed(() => !['error', 'empty'].includes(props.controller.status.value))
 const showSkeleton = computed(
   () => props.controller.status.value === 'loading' && props.controller.items.value.length === 0,
 )
@@ -59,8 +57,11 @@ const showSkeleton = computed(
 
     <SkeletonTable v-if="showSkeleton" :rows="controller.pageSize.value" />
 
-    <ErrorState v-else-if="controller.status.value === 'error'" :message="controller.error.value ?? ''"
-      :on-retry="() => controller.refresh()" />
+    <ErrorState
+      v-else-if="controller.status.value === 'error'"
+      :message="controller.error.value ?? ''"
+      :on-retry="() => controller.refresh()"
+    />
 
     <template v-else-if="controller.status.value === 'empty'">
       <slot name="empty">
@@ -73,18 +74,28 @@ const showSkeleton = computed(
         <table class="table" :class="{ 'table-sm': dense }">
           <thead>
             <tr>
-              <th v-for="column in columns" :key="column.key" :style="column.width ? { width: column.width } : undefined"
-                :class="alignClass[column.align ?? 'left']">
+              <th
+                v-for="column in columns"
+                :key="column.key"
+                :style="column.width ? { width: column.width } : undefined"
+                :class="alignClass[column.align ?? 'left']"
+              >
                 {{ column.header }}
               </th>
               <th v-if="$slots.actions" class="text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="row in controller.items.value" :key="getRowKey(row)"
-              class="transition-colors hover:bg-base-200">
-              <td v-for="column in columns" :key="column.key"
-                :class="[alignClass[column.align ?? 'left'], cellClassFor(column, row)]">
+            <tr
+              v-for="row in controller.items.value"
+              :key="getRowKey(row)"
+              class="transition-colors hover:bg-base-200"
+            >
+              <td
+                v-for="column in columns"
+                :key="column.key"
+                :class="[alignClass[column.align ?? 'left'], cellClassFor(column, row)]"
+              >
                 <slot :name="`cell:${column.key}`" :row="row" :value="cellValue(column, row)">
                   {{ cellValue(column, row) }}
                 </slot>

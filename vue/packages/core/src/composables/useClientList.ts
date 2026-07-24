@@ -37,9 +37,7 @@ export function useClientList<T>(options: UseClientListOptions<T>): ListControll
     onRefresh,
   } = options
 
-  const sourceItems = computed<T[]>(() =>
-    typeof source === 'function' ? source() : source.value,
-  )
+  const sourceItems = computed<T[]>(() => (typeof source === 'function' ? source() : source.value))
 
   const page = ref(1)
   const pageSize = ref(initialPageSize)

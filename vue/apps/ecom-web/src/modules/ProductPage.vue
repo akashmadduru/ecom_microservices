@@ -3,11 +3,15 @@
     <div class="mx-auto max-w-6xl space-y-6">
       <nav aria-label="Breadcrumb" class="text-sm text-muted">
         <ol class="flex flex-wrap items-center gap-2">
-          <li><router-link to="/products" class="hover:text-base-content">Products</router-link></li>
+          <li>
+            <router-link to="/products" class="hover:text-base-content">Products</router-link>
+          </li>
           <li class="text-base-content/40">/</li>
           <li>{{ productStore.selectedProduct.category }}</li>
           <li class="text-base-content/40">/</li>
-          <li class="line-clamp-1 font-semibold text-base-content">{{ productStore.selectedProduct.title }}</li>
+          <li class="line-clamp-1 font-semibold text-base-content">
+            {{ productStore.selectedProduct.title }}
+          </li>
         </ol>
       </nav>
 
@@ -15,12 +19,22 @@
         <div class="space-y-4">
           <div class="card">
             <figure class="p-4">
-              <AppImage :src="images[activeImage]" alt="" :raw="false" img-class="h-80 w-full rounded-xl object-cover" />
+              <AppImage
+                :src="images[activeImage]"
+                alt=""
+                :raw="false"
+                img-class="h-80 w-full rounded-xl object-cover"
+              />
             </figure>
           </div>
           <div class="flex flex-wrap gap-3">
-            <button v-for="(image, index) in images" :key="image" class="h-20 w-20 overflow-hidden rounded-lg border-2"
-              :class="activeImage === index ? 'border-primary' : 'border-transparent'" @click="activeImage = index">
+            <button
+              v-for="(image, index) in images"
+              :key="image"
+              class="h-20 w-20 overflow-hidden rounded-lg border-2"
+              :class="activeImage === index ? 'border-primary' : 'border-transparent'"
+              @click="activeImage = index"
+            >
               <AppImage :src="image" alt="" :raw="false" img-class="h-full w-full object-cover" />
             </button>
           </div>
@@ -29,33 +43,52 @@
         <div class="card">
           <div class="card-body space-y-4">
             <div class="space-y-2">
-              <p class="section-kicker section-kicker-sm">{{ productStore.selectedProduct.category }}</p>
-              <h1 class="line-clamp-3 text-3xl font-semibold">{{ productStore.selectedProduct.title }}</h1>
+              <p class="section-kicker section-kicker-sm">
+                {{ productStore.selectedProduct.category }}
+              </p>
+              <h1 class="line-clamp-3 text-3xl font-semibold">
+                {{ productStore.selectedProduct.title }}
+              </h1>
               <p class="text-sm text-muted">{{ productStore.selectedProduct.description }}</p>
             </div>
 
             <div class="flex flex-wrap items-baseline gap-3">
               <span class="text-3xl font-semibold">₹{{ sellingPrice.toFixed(2) }}</span>
-              <span v-if="discountApplies" class="text-lg text-subtle line-through">₹{{ (mrp ?? 0).toFixed(2) }}</span>
-              <span v-if="discountApplies" class="badge badge-success">{{ discountPercent }}% off</span>
+              <span v-if="discountApplies" class="text-lg text-subtle line-through"
+                >₹{{ (mrp ?? 0).toFixed(2) }}</span
+              >
+              <span v-if="discountApplies" class="badge badge-success"
+                >{{ discountPercent }}% off</span
+              >
             </div>
 
             <div class="flex flex-wrap items-center gap-2 text-sm text-muted">
               <span class="badge badge-outline">⭐ {{ productStore.selectedProduct.rating }}</span>
               <span>Brand: {{ productStore.selectedProduct.brand }}</span>
-              <span v-if="stockBadge" class="badge" :class="stockBadge.class">{{ stockBadge.label }}</span>
+              <span v-if="stockBadge" class="badge" :class="stockBadge.class">{{
+                stockBadge.label
+              }}</span>
             </div>
 
-            <div v-if="inventoryStore.selected" class="flex flex-wrap items-center gap-2 text-sm text-muted">
+            <div
+              v-if="inventoryStore.selected"
+              class="flex flex-wrap items-center gap-2 text-sm text-muted"
+            >
               <span>SKU: {{ inventoryStore.selected.sku }}</span>
               <span class="text-base-content/40">•</span>
               <span>{{ inventoryStore.selected.available_quantity }} available</span>
             </div>
 
-            <div v-if="manufacturerStore.selectedManufacturer" class="space-y-1 rounded-lg bg-base-200 p-4">
+            <div
+              v-if="manufacturerStore.selectedManufacturer"
+              class="space-y-1 rounded-lg bg-base-200 p-4"
+            >
               <p class="font-semibold">Manufacturer</p>
               <p class="text-sm text-muted">{{ manufacturerStore.selectedManufacturer.name }}</p>
-              <p v-if="manufacturerStore.selectedManufacturer.country_of_origin" class="text-sm text-muted">
+              <p
+                v-if="manufacturerStore.selectedManufacturer.country_of_origin"
+                class="text-sm text-muted"
+              >
                 Country of origin: {{ manufacturerStore.selectedManufacturer.country_of_origin }}
               </p>
             </div>
@@ -64,8 +97,11 @@
               <p class="font-semibold">Specifications</p>
               <table v-if="hasAttributes" class="w-full text-sm text-muted">
                 <tbody>
-                  <tr v-for="(value, key) in productStore.selectedProduct.attributes" :key="key"
-                    class="border-b border-base-300 last:border-0">
+                  <tr
+                    v-for="(value, key) in productStore.selectedProduct.attributes"
+                    :key="key"
+                    class="border-b border-base-300 last:border-0"
+                  >
                     <td class="py-1 pr-4 font-medium text-base-content">{{ key }}</td>
                     <td class="py-1">{{ value }}</td>
                   </tr>
@@ -84,10 +120,16 @@
             </div>
 
             <div class="flex flex-wrap gap-3">
-              <button class="btn btn-primary" @click="addToCart" :class="{ 'opacity-70': isProcessing }">{{ isProcessing ?
-                'Adding...' : 'Add to cart' }}</button>
-              <button class="btn btn-outline" @click="toggleWishlist">{{ isWishlisted ? 'Saved' : 'Save wishlist'
-              }}</button>
+              <button
+                class="btn btn-primary"
+                @click="addToCart"
+                :class="{ 'opacity-70': isProcessing }"
+              >
+                {{ isProcessing ? 'Adding...' : 'Add to cart' }}
+              </button>
+              <button class="btn btn-outline" @click="toggleWishlist">
+                {{ isWishlisted ? 'Saved' : 'Save wishlist' }}
+              </button>
             </div>
           </div>
         </div>
@@ -118,7 +160,8 @@ const stockBadge = computed(() => {
   const record = inventoryStore.selected
   if (!record) return null
   if (record.available_quantity <= 0) return { label: 'Out of stock', class: 'badge-error' }
-  if (record.status === 'LOW_STOCK') return { label: `Only ${record.available_quantity} left`, class: 'badge-warning' }
+  if (record.status === 'LOW_STOCK')
+    return { label: `Only ${record.available_quantity} left`, class: 'badge-warning' }
   return { label: 'In stock', class: 'badge-success' }
 })
 
@@ -130,7 +173,9 @@ const discountApplies = computed(() =>
 const sellingPrice = computed(() =>
   productStore.selectedProduct ? getSellingPrice(productStore.selectedProduct) : 0,
 )
-const mrp = computed(() => (productStore.selectedProduct ? getMrp(productStore.selectedProduct) : null))
+const mrp = computed(() =>
+  productStore.selectedProduct ? getMrp(productStore.selectedProduct) : null,
+)
 const discountPercent = computed(() =>
   productStore.selectedProduct ? getDiscountPercent(productStore.selectedProduct) : null,
 )

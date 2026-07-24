@@ -3,32 +3,57 @@
     <legend class="sr-only">Rating</legend>
 
     <label class="flex cursor-pointer items-center gap-2">
-      <input type="radio" name="rating-filter" class="radio radio-sm radio-primary" :checked="modelValue === null"
-        @change="selectRating(null)" />
+      <input
+        type="radio"
+        name="rating-filter"
+        class="radio radio-sm radio-primary"
+        :checked="modelValue === null"
+        @change="selectRating(null)"
+      />
       <span>All ratings</span>
     </label>
 
     <label class="flex cursor-pointer items-center gap-2">
-      <input type="radio" name="rating-filter" class="radio radio-sm radio-primary" :checked="modelValue === 2"
-        @change="selectRating(2)" />
+      <input
+        type="radio"
+        name="rating-filter"
+        class="radio radio-sm radio-primary"
+        :checked="modelValue === 2"
+        @change="selectRating(2)"
+      />
       <span>2 Stars & Up</span>
     </label>
 
     <label class="flex cursor-pointer items-center gap-2">
-      <input type="radio" name="rating-filter" class="radio radio-sm radio-primary" :checked="modelValue === 3"
-        @change="selectRating(3)" />
+      <input
+        type="radio"
+        name="rating-filter"
+        class="radio radio-sm radio-primary"
+        :checked="modelValue === 3"
+        @change="selectRating(3)"
+      />
       <span>3 Stars & Up</span>
     </label>
 
     <label class="flex cursor-pointer items-center gap-2">
-      <input type="radio" name="rating-filter" class="radio radio-sm radio-primary" :checked="modelValue === 4"
-        @change="selectRating(4)" />
+      <input
+        type="radio"
+        name="rating-filter"
+        class="radio radio-sm radio-primary"
+        :checked="modelValue === 4"
+        @change="selectRating(4)"
+      />
       <span>4 Stars & Up</span>
     </label>
 
     <label class="flex cursor-pointer items-center gap-2">
-      <input type="radio" name="rating-filter" class="radio radio-sm radio-primary" :checked="modelValue === 5"
-        @change="selectRating(5)" />
+      <input
+        type="radio"
+        name="rating-filter"
+        class="radio radio-sm radio-primary"
+        :checked="modelValue === 5"
+        @change="selectRating(5)"
+      />
       <span>5 Stars</span>
     </label>
   </fieldset>

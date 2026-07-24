@@ -65,8 +65,16 @@ function onNativeCancel(event: Event) {
 </script>
 
 <template>
-  <dialog ref="dialogEl" class="modal" :class="{ 'modal-open': open }" role="dialog" aria-modal="true"
-    :aria-labelledby="title ? titleId : undefined" :aria-describedby="descId" @cancel="onNativeCancel">
+  <dialog
+    ref="dialogEl"
+    class="modal"
+    :class="{ 'modal-open': open }"
+    role="dialog"
+    aria-modal="true"
+    :aria-labelledby="title ? titleId : undefined"
+    :aria-describedby="descId"
+    @cancel="onNativeCancel"
+  >
     <div class="modal-box border border-base-300 bg-base-100">
       <h3 v-if="title" :id="titleId" class="text-lg font-semibold">{{ title }}</h3>
       <p :id="descId" class="py-4 text-base-content/80">{{ message }}</p>
@@ -74,13 +82,23 @@ function onNativeCancel(event: Event) {
         <button ref="cancelBtn" class="btn btn-ghost" :disabled="loading" @click="onCancel">
           {{ cancelText }}
         </button>
-        <button class="btn" :class="tone === 'danger' ? 'btn-error' : 'btn-primary'" :disabled="loading"
-          @click="emit('confirm')">
+        <button
+          class="btn"
+          :class="tone === 'danger' ? 'btn-error' : 'btn-primary'"
+          :disabled="loading"
+          @click="emit('confirm')"
+        >
           <span v-if="loading" class="loading loading-spinner loading-sm" />
           {{ confirmText }}
         </button>
       </div>
     </div>
-    <button type="button" class="modal-backdrop" aria-label="Close" :disabled="loading" @click="onCancel" />
+    <button
+      type="button"
+      class="modal-backdrop"
+      aria-label="Close"
+      :disabled="loading"
+      @click="onCancel"
+    />
   </dialog>
 </template>

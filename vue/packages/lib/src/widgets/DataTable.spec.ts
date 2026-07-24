@@ -111,9 +111,7 @@ describe('DataTable', () => {
   })
 
   it('has no sort controls in the header (dead sort code was removed)', () => {
-    const wrapper = mountTable(
-      makeController({ status: 'success', items: [{ id: 1, name: 'A' }] }),
-    )
+    const wrapper = mountTable(makeController({ status: 'success', items: [{ id: 1, name: 'A' }] }))
     expect(wrapper.find('thead button').exists()).toBe(false)
     expect(wrapper.find('thead [aria-sort]').exists()).toBe(false)
   })

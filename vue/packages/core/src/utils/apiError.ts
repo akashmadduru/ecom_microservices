@@ -37,7 +37,8 @@ export function normalizeApiError(error: unknown): ApiError {
 
   // ecom microservices wrap errors as { error: { code, message, details, correlation_id } }
   const errorEnvelope = data?.error as Record<string, unknown> | string | undefined
-  const detail = data?.detail ?? (typeof errorEnvelope === 'object' ? errorEnvelope?.details : undefined)
+  const detail =
+    data?.detail ?? (typeof errorEnvelope === 'object' ? errorEnvelope?.details : undefined)
 
   if (isValidationDetailList(detail)) {
     for (const entry of detail) {

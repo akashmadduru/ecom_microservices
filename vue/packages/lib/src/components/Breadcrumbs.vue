@@ -26,7 +26,11 @@ const crumbs = computed<Crumb[]>(() =>
     <ol class="flex flex-wrap items-center gap-2">
       <li v-for="(crumb, index) in crumbs" :key="crumb.to" class="flex items-center gap-2">
         <span v-if="index > 0" class="text-base-content/40">/</span>
-        <router-link v-if="index < crumbs.length - 1" :to="crumb.to" class="hover:text-base-content">
+        <router-link
+          v-if="index < crumbs.length - 1"
+          :to="crumb.to"
+          class="hover:text-base-content"
+        >
           {{ crumb.label }}
         </router-link>
         <span v-else class="font-semibold text-base-content">{{ crumb.label }}</span>

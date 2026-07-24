@@ -11,7 +11,10 @@ vi.mock('vue-router', () => ({
 import Breadcrumbs from './Breadcrumbs.vue'
 
 function matched(entries: { path: string; breadcrumb?: unknown }[]): RouteLocationMatched[] {
-  return entries.map((e) => ({ path: e.path, meta: { breadcrumb: e.breadcrumb } })) as unknown as RouteLocationMatched[]
+  return entries.map((e) => ({
+    path: e.path,
+    meta: { breadcrumb: e.breadcrumb },
+  })) as unknown as RouteLocationMatched[]
 }
 
 function makeRoute(

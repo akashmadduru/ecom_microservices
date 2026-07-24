@@ -4,44 +4,72 @@
       <div class="card w-full">
         <div class="card-body">
           <h1 class="text-3xl font-semibold">Create your account</h1>
-          <p class="text-sm text-muted">Join the store to save wishlist items, track orders, and checkout
-            faster.</p>
+          <p class="text-sm text-muted">
+            Join the store to save wishlist items, track orders, and checkout faster.
+          </p>
 
           <form class="mt-6 space-y-4" @submit.prevent="onSubmit" novalidate>
-            <div v-if="formError.formError.value"
-              class="alert-soft-error">
+            <div v-if="formError.formError.value" class="alert-soft-error">
               {{ formError.formError.value }}
             </div>
 
             <div class="form-row-2">
               <label class="form-field">
-                <input v-model="form.username" class="input input-bordered"
-                  :class="{ 'input-error': formError.fieldError('username') || usernameError }" type="text"
-                  placeholder="Username" required minlength="3" @blur="touched.username = true" />
+                <input
+                  v-model="form.username"
+                  class="input input-bordered"
+                  :class="{ 'input-error': formError.fieldError('username') || usernameError }"
+                  type="text"
+                  placeholder="Username"
+                  required
+                  minlength="3"
+                  @blur="touched.username = true"
+                />
                 <span v-if="usernameError" class="field-error">{{ usernameError }}</span>
                 <span v-else-if="formError.fieldError('username')" class="field-error">{{
-                  formError.fieldError('username') }}</span>
+                  formError.fieldError('username')
+                }}</span>
               </label>
               <label class="form-field">
-                <input v-model="form.email" class="input input-bordered"
-                  :class="{ 'input-error': formError.fieldError('email') || emailError }" type="email"
-                  placeholder="you@example.com" required @blur="touched.email = true" />
+                <input
+                  v-model="form.email"
+                  class="input input-bordered"
+                  :class="{ 'input-error': formError.fieldError('email') || emailError }"
+                  type="email"
+                  placeholder="you@example.com"
+                  required
+                  @blur="touched.email = true"
+                />
                 <span v-if="emailError" class="field-error">{{ emailError }}</span>
                 <span v-else-if="formError.fieldError('email')" class="field-error">{{
-                  formError.fieldError('email') }}</span>
+                  formError.fieldError('email')
+                }}</span>
               </label>
             </div>
             <label class="form-field">
-              <input v-model="form.password" class="input input-bordered"
-                :class="{ 'input-error': formError.fieldError('password') || passwordError }" type="password"
-                placeholder="Minimum 8 characters" required minlength="8" @blur="touched.password = true" />
+              <input
+                v-model="form.password"
+                class="input input-bordered"
+                :class="{ 'input-error': formError.fieldError('password') || passwordError }"
+                type="password"
+                placeholder="Minimum 8 characters"
+                required
+                minlength="8"
+                @blur="touched.password = true"
+              />
               <span v-if="passwordError" class="field-error">{{ passwordError }}</span>
               <span v-else-if="formError.fieldError('password')" class="field-error">{{
-                formError.fieldError('password') }}</span>
+                formError.fieldError('password')
+              }}</span>
             </label>
 
-            <button :class="['mt-4 btn btn-primary w-full', { 'opacity-70': processing }]" type="submit"
-              :disabled="processing">{{ processing ? 'Creating...' : 'Sign up' }}</button>
+            <button
+              :class="['mt-4 btn btn-primary w-full', { 'opacity-70': processing }]"
+              type="submit"
+              :disabled="processing"
+            >
+              {{ processing ? 'Creating...' : 'Sign up' }}
+            </button>
           </form>
         </div>
       </div>

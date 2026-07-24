@@ -33,7 +33,11 @@ function normalizeInventoryListPayload(
 
   if (payload && typeof payload === 'object') {
     const data = payload as Record<string, unknown>
-    const rawItems = (data.items ?? data.inventory ?? data.results ?? data.data ?? []) as InventoryRecord[]
+    const rawItems = (data.items ??
+      data.inventory ??
+      data.results ??
+      data.data ??
+      []) as InventoryRecord[]
     const paginationFromApi = (data.pagination ?? data.meta ?? null) as Partial<Pagination> | null
     const totalItems = Number(paginationFromApi?.total_items ?? rawItems.length)
 

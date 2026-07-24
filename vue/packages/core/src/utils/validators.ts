@@ -68,10 +68,7 @@ export const minNumber =
       ? (msg ?? `Must be a number of at least ${min}.`)
       : null
 
-export function validate<T extends object>(
-  form: T,
-  schema: ValidationSchema<T>,
-): ValidationResult {
+export function validate<T extends object>(form: T, schema: ValidationSchema<T>): ValidationResult {
   const errors: Record<string, string[]> = {}
 
   for (const key of Object.keys(schema) as (keyof T)[]) {

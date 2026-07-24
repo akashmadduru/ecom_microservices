@@ -77,10 +77,7 @@ describe('productSchema', () => {
   })
 
   it('rejects a cleared numeric price (empty string edge case)', () => {
-    const result = validate(
-      { ...base, retail_price: '' as unknown as number },
-      productSchema,
-    )
+    const result = validate({ ...base, retail_price: '' as unknown as number }, productSchema)
     expect(result.valid).toBe(false)
     expect(result.errors.retail_price).toBeDefined()
   })

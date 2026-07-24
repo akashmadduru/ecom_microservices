@@ -5,38 +5,63 @@
     </div>
 
     <div class="flex items-center gap-2">
-      <router-link class="btn btn-ghost btn-circle btn-sm" to="/products" aria-label="Products" title="Products">
+      <router-link
+        class="btn btn-ghost btn-circle btn-sm"
+        to="/products"
+        aria-label="Products"
+        title="Products"
+      >
         <span class="text-lg">🛍️</span>
       </router-link>
-      <router-link class="btn btn-ghost btn-circle btn-sm relative" to="/wishlist" aria-label="Wishlist"
-        title="Wishlist">
+      <router-link
+        class="btn btn-ghost btn-circle btn-sm relative"
+        to="/wishlist"
+        aria-label="Wishlist"
+        title="Wishlist"
+      >
         <span class="text-lg">♡</span>
-        <span v-if="wishlistCount" class="badge badge-primary badge-xs absolute -right-2 -top-2">{{ wishlistCount
-          }}</span>
+        <span v-if="wishlistCount" class="badge badge-primary badge-xs absolute -right-2 -top-2">{{
+          wishlistCount
+        }}</span>
       </router-link>
-      <router-link class="btn btn-ghost btn-circle btn-sm relative" to="/cart" aria-label="Cart" title="Cart">
+      <router-link
+        class="btn btn-ghost btn-circle btn-sm relative"
+        to="/cart"
+        aria-label="Cart"
+        title="Cart"
+      >
         <span class="text-lg">🛒</span>
-        <span v-if="cartCount" class="badge badge-primary badge-xs absolute -right-2 -top-2">{{ cartCount }}</span>
+        <span v-if="cartCount" class="badge badge-primary badge-xs absolute -right-2 -top-2">{{
+          cartCount
+        }}</span>
       </router-link>
 
       <details v-if="authStore.isAuthenticated" class="dropdown dropdown-end">
         <summary class="btn btn-ghost btn-circle btn-sm p-0">
           <div
-            class="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-primary to-neutral text-sm font-semibold text-primary-content">
+            class="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-primary to-neutral text-sm font-semibold text-primary-content"
+          >
             {{ initials }}
           </div>
         </summary>
         <ul
-          class="menu dropdown-content z-[1] mt-3 w-48 rounded-box border border-base-300 bg-base-100 p-2 shadow-soft">
+          class="menu dropdown-content z-[1] mt-3 w-48 rounded-box border border-base-300 bg-base-100 p-2 shadow-soft"
+        >
           <li><router-link to="/profile">Profile</router-link></li>
           <li><router-link to="/orders">Orders</router-link></li>
           <li><router-link to="/address">Addresses</router-link></li>
-          <li v-if="authStore.isAdmin"><router-link to="/admin">Admin</router-link></li>
+          <li v-if="authStore.isAdmin"><a :href="adminAppUrl">Admin</a></li>
           <li><button @click="handleLogout">Logout</button></li>
         </ul>
       </details>
 
-      <router-link v-else class="btn btn-primary btn-circle btn-sm" to="/signin" aria-label="Login" title="Login">
+      <router-link
+        v-else
+        class="btn btn-primary btn-circle btn-sm"
+        to="/signin"
+        aria-label="Login"
+        title="Login"
+      >
         <span class="text-base">🔐</span>
       </router-link>
     </div>
@@ -52,6 +77,10 @@ import { useAuthStore } from 'core/stores/auth'
 const store = useEcommerceStore()
 const authStore = useAuthStore()
 const router = useRouter()
+
+// The admin console is now a separate app/origin (`apps/ecom-admin`), not an
+// in-app route — link to it via a plain anchor instead of `router-link`.
+const adminAppUrl = import.meta.env.VITE_ADMIN_APP_URL || 'http://localhost:5174'
 
 const cartCount = computed(() => store.cart.reduce((s, i) => s + i.quantity, 0))
 const wishlistCount = computed(() => store.wishlist.length)

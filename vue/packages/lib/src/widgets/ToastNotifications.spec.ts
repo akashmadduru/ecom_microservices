@@ -39,7 +39,12 @@ describe('ToastNotifications', () => {
     // Guard against regressing back to the old hardcoded Tailwind palette classes.
     const flat = classes.flat()
     expect(flat).not.toEqual(
-      expect.arrayContaining(['border-emerald-500/30', 'border-sky-500/30', 'border-amber-500/30', 'border-rose-500/30']),
+      expect.arrayContaining([
+        'border-emerald-500/30',
+        'border-sky-500/30',
+        'border-amber-500/30',
+        'border-rose-500/30',
+      ]),
     )
   })
 

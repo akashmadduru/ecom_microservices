@@ -19,6 +19,7 @@ on:
           - inventory-service
           - product-service
           - ecom-web
+          - ecom-admin
       image-tag:
         description: 'Image tag to deploy (e.g. sha-abc123def456)'
         required: true

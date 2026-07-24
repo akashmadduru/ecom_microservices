@@ -8,8 +8,10 @@
 
           <div class="mt-6 space-y-4">
             <div id="google-signin-button" class="w-full" />
-            <div v-if="googleHint"
-              class="rounded-2xl border border-warning/30 bg-warning/10 p-3 text-sm text-warning-content">
+            <div
+              v-if="googleHint"
+              class="rounded-2xl border border-warning/30 bg-warning/10 p-3 text-sm text-warning-content"
+            >
               {{ googleHint }}
             </div>
             <a class="btn btn-outline w-full" :href="authStore.googleAuthorizeRedirectUrl()">
@@ -23,27 +25,44 @@
           </div>
 
           <form class="mt-6 flex flex-col space-y-4" @submit.prevent="onSubmit" novalidate>
-            <div v-if="formError.formError.value"
-              class="alert-soft-error">
+            <div v-if="formError.formError.value" class="alert-soft-error">
               {{ formError.formError.value }}
             </div>
 
             <label class="form-field">
-              <input v-model="form.username" class="input input-bordered"
-                :class="{ 'input-error': formError.fieldError('username') }" type="text"
-                placeholder="Enter username" required />
+              <input
+                v-model="form.username"
+                class="input input-bordered"
+                :class="{ 'input-error': formError.fieldError('username') }"
+                type="text"
+                placeholder="Enter username"
+                required
+              />
               <span v-if="formError.fieldError('username')" class="field-error">{{
-                formError.fieldError('username') }}</span>
+                formError.fieldError('username')
+              }}</span>
             </label>
             <label class="form-field">
-              <input v-model="form.password" class="input input-bordered"
-                :class="{ 'input-error': formError.fieldError('password') }" type="password"
-                placeholder="Enter password" required minlength="1" />
+              <input
+                v-model="form.password"
+                class="input input-bordered"
+                :class="{ 'input-error': formError.fieldError('password') }"
+                type="password"
+                placeholder="Enter password"
+                required
+                minlength="1"
+              />
               <span v-if="formError.fieldError('password')" class="field-error">{{
-                formError.fieldError('password') }}</span>
+                formError.fieldError('password')
+              }}</span>
             </label>
-            <button :class="['btn btn-primary w-full', { 'opacity-70': processing }]" type="submit"
-              :disabled="processing">{{ processing ? 'Signing in...' : 'Log in' }}</button>
+            <button
+              :class="['btn btn-primary w-full', { 'opacity-70': processing }]"
+              type="submit"
+              :disabled="processing"
+            >
+              {{ processing ? 'Signing in...' : 'Log in' }}
+            </button>
           </form>
           <p class="mt-4 text-sm text-muted">
             New here? {{ ' ' }}

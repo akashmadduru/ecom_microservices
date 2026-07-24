@@ -26,10 +26,7 @@ export function useFormErrors() {
     clientErrors.value = {}
   }
 
-  function validateForm<T extends object>(
-    form: T,
-    schema: ValidationSchema<T>,
-  ): boolean {
+  function validateForm<T extends object>(form: T, schema: ValidationSchema<T>): boolean {
     const result = validate(form, schema)
     clientErrors.value = result.errors
     return result.valid

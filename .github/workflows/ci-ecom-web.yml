@@ -5,14 +5,18 @@ name: ecom-web CI
 on:
   pull_request:
     paths:
-      - 'apps/ecom-web/**'
+      - 'vue/apps/ecom-web/**'
+      - 'vue/packages/lib/**'
+      - 'vue/packages/core/**'
       - '.github/workflows/ci-ecom-web.yml'
       - '.github/workflows/_reusable-node-app-ci.yml'
       - '.github/workflows/_reusable-docker-build-push.yml'
   push:
     branches: [main]
     paths:
-      - 'apps/ecom-web/**'
+      - 'vue/apps/ecom-web/**'
+      - 'vue/packages/lib/**'
+      - 'vue/packages/core/**'
       - '.github/workflows/ci-ecom-web.yml'
       - '.github/workflows/_reusable-node-app-ci.yml'
       - '.github/workflows/_reusable-docker-build-push.yml'
@@ -27,7 +31,9 @@ jobs:
     permissions:
       contents: read
     with:
-      working-path: apps/ecom-web
+      workspace-root: vue
+      workspace-name: ecom-web
+      run-e2e: true
 
   docker:
     needs: [lint-test]
@@ -36,9 +42,10 @@ jobs:
       contents: read
       packages: write
     with:
-      # Own subdirectory as context, not repo root — unlike the Python
-      # services, this component has no dependency outside apps/ecom-web.
-      context: apps/ecom-web
-      dockerfile-path: apps/ecom-web/Dockerfile
+      # `vue` (the npm workspace root) as context, not just apps/ecom-web —
+      # this app depends on packages/lib and packages/core as workspace
+      # siblings, but nothing outside vue/ is needed.
+      context: vue
+      dockerfile-path: vue/apps/ecom-web/Dockerfile
       image-name: ghcr.io/${{ github.repository_owner }}/ecom-microservices-ecom-web
       push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}

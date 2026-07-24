@@ -1,0 +1,77 @@
+name: Reusable / Node package lint + typecheck + test
+
+# Lean counterpart to `_reusable-node-app-ci.yml` for the standalone `packages/*`
+# workspace packages (`lib`, `core`): lint + typecheck + test only — no e2e, no
+# docker, since these packages aren't deployable artifacts on their own.
+on:
+  workflow_call:
+    inputs:
+      workspace-root:
+        description: Path to the npm workspace root, relative to repo root (e.g. vue)
+        required: true
+        type: string
+      workspace-name:
+        description: The npm workspace package name to target (e.g. lib, core) — not necessarily the directory name
+        required: true
+        type: string
+
+jobs:
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: ${{ inputs.workspace-root }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: ${{ inputs.workspace-root }}/package-lock.json
+      - run: npm ci
+      # Deliberately NOT `npm run lint`/`npm run format` — those scripts run
+      # with --fix/--write and would silently autofix violations in the
+      # ephemeral runner and exit 0, masking real failures from ever
+      # blocking a PR. Check-only invocations here instead.
+      - name: oxlint (check only)
+        run: npm exec --workspace=${{ inputs.workspace-name }} -- oxlint .
+      - name: eslint (check only)
+        run: npm exec --workspace=${{ inputs.workspace-name }} -- eslint .
+      - name: prettier (check only)
+        run: npm exec --workspace=${{ inputs.workspace-name }} -- prettier --check src/
+
+  typecheck:
+    name: typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: ${{ inputs.workspace-root }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: ${{ inputs.workspace-root }}/package-lock.json
+      - run: npm ci
+      - run: npm run type-check --workspace=${{ inputs.workspace-name }}
+
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: ${{ inputs.workspace-root }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: ${{ inputs.workspace-root }}/package-lock.json
+      - run: npm ci
+      - run: npm exec --workspace=${{ inputs.workspace-name }} -- vitest run

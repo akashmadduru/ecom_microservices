@@ -5,16 +5,26 @@
       <div class="grid grid-cols-1 gap-4 lg:grid-cols-4">
         <!-- Headline / CTA tile -->
         <div class="bento-tile bento-tile-hero lg:col-span-3 lg:row-span-2">
-          <span class="pointer-events-none absolute -right-6 top-8 h-20 w-20 rounded-full bg-accent/20"
-            aria-hidden="true" />
-          <span class="pointer-events-none absolute right-20 top-4 h-3 w-3 rounded-full bg-primary/40"
-            aria-hidden="true" />
-          <span class="pointer-events-none absolute -bottom-8 right-28 h-28 w-28 rounded-full bg-primary/10"
-            aria-hidden="true" />
-          <span class="pointer-events-none absolute bottom-12 right-10 h-2.5 w-2.5 rounded-full bg-base-content/20"
-            aria-hidden="true" />
-          <span class="pointer-events-none absolute left-1/2 top-2 h-2 w-2 rounded-full bg-secondary/50"
-            aria-hidden="true" />
+          <span
+            class="pointer-events-none absolute -right-6 top-8 h-20 w-20 rounded-full bg-accent/20"
+            aria-hidden="true"
+          />
+          <span
+            class="pointer-events-none absolute right-20 top-4 h-3 w-3 rounded-full bg-primary/40"
+            aria-hidden="true"
+          />
+          <span
+            class="pointer-events-none absolute -bottom-8 right-28 h-28 w-28 rounded-full bg-primary/10"
+            aria-hidden="true"
+          />
+          <span
+            class="pointer-events-none absolute bottom-12 right-10 h-2.5 w-2.5 rounded-full bg-base-content/20"
+            aria-hidden="true"
+          />
+          <span
+            class="pointer-events-none absolute left-1/2 top-2 h-2 w-2 rounded-full bg-secondary/50"
+            aria-hidden="true"
+          />
 
           <div class="eyebrow-pill w-fit">
             <span class="text-sm">✦</span>
@@ -32,8 +42,9 @@
           <div class="hero-feature-callout">
             <span class="hero-feature-number">01</span>
             <span class="hero-connector" aria-hidden="true" />
-            <span class="text-sm text-muted">Real catalog data, zero placeholders — every price and rating
-              updates live.</span>
+            <span class="text-sm text-muted"
+              >Real catalog data, zero placeholders — every price and rating updates live.</span
+            >
           </div>
 
           <div class="flex flex-wrap items-center gap-3">
@@ -41,23 +52,35 @@
             <router-link class="hero-cta-arrow" to="/products" aria-label="Browse all products">
               <span aria-hidden="true">→</span>
             </router-link>
-            <router-link class="btn btn-outline btn-sm ml-2" to="/signup">Create account</router-link>
+            <router-link class="btn btn-outline btn-sm ml-2" to="/signup"
+              >Create account</router-link
+            >
           </div>
         </div>
 
         <!-- Top Rated tile -->
         <div class="bento-tile lg:col-span-1">
-          <router-link class="bento-tile-link" to="/products" aria-label="Browse all products">↗</router-link>
+          <router-link class="bento-tile-link" to="/products" aria-label="Browse all products"
+            >↗</router-link
+          >
           <p class="bento-tile-title">Top Rated</p>
           <div v-if="topRatedProducts.length" class="space-y-3">
-            <router-link v-for="product in topRatedProducts" :key="product.id" :to="`/products/${product.id}`"
-              class="flex items-center gap-3">
-              <AppImage :src="product.image_urls" :alt="product.title"
-                img-class="h-12 w-12 shrink-0 rounded-xl object-cover" />
+            <router-link
+              v-for="product in topRatedProducts"
+              :key="product.id"
+              :to="`/products/${product.id}`"
+              class="flex items-center gap-3"
+            >
+              <AppImage
+                :src="product.image_urls"
+                :alt="product.title"
+                img-class="h-12 w-12 shrink-0 rounded-xl object-cover"
+              />
               <span class="min-w-0">
                 <span class="block truncate text-sm font-semibold">{{ product.title }}</span>
-                <span class="block text-xs text-muted">⭐ {{ product.rating }} · ₹{{
-                  getSellingPrice(product).toFixed(2) }}</span>
+                <span class="block text-xs text-muted"
+                  >⭐ {{ product.rating }} · ₹{{ getSellingPrice(product).toFixed(2) }}</span
+                >
               </span>
             </router-link>
           </div>
@@ -67,17 +90,28 @@
 
         <!-- Deals tile -->
         <div class="bento-tile lg:col-span-1">
-          <router-link class="bento-tile-link" to="/products" aria-label="Browse all products">↗</router-link>
+          <router-link class="bento-tile-link" to="/products" aria-label="Browse all products"
+            >↗</router-link
+          >
           <p class="bento-tile-title">Deals</p>
           <div v-if="dealProducts.length" class="space-y-3">
-            <router-link v-for="product in dealProducts" :key="product.id" :to="`/products/${product.id}`"
-              class="flex items-center gap-3">
-              <AppImage :src="product.image_urls" :alt="product.title"
-                img-class="h-12 w-12 shrink-0 rounded-xl object-cover" />
+            <router-link
+              v-for="product in dealProducts"
+              :key="product.id"
+              :to="`/products/${product.id}`"
+              class="flex items-center gap-3"
+            >
+              <AppImage
+                :src="product.image_urls"
+                :alt="product.title"
+                img-class="h-12 w-12 shrink-0 rounded-xl object-cover"
+              />
               <span class="min-w-0">
                 <span class="block truncate text-sm font-semibold">{{ product.title }}</span>
-                <span class="block text-xs text-muted">₹{{ getSellingPrice(product).toFixed(2) }} · {{
-                  getDiscountPercent(product) }}% off</span>
+                <span class="block text-xs text-muted"
+                  >₹{{ getSellingPrice(product).toFixed(2) }} · {{ getDiscountPercent(product) }}%
+                  off</span
+                >
               </span>
             </router-link>
           </div>
@@ -87,12 +121,18 @@
 
         <!-- Shop by Brand tile -->
         <div class="bento-tile lg:col-span-2">
-          <router-link class="bento-tile-link" to="/products" aria-label="Browse all products">↗</router-link>
+          <router-link class="bento-tile-link" to="/products" aria-label="Browse all products"
+            >↗</router-link
+          >
           <p class="bento-tile-title">Shop by Brand</p>
           <div v-if="brandsPreview.length" class="flex flex-wrap items-center gap-4">
             <div v-for="brand in brandsPreview" :key="brand.id" class="flex items-center gap-2">
-              <AppImage v-if="brand.logo_url" :src="brand.logo_url" :alt="brand.name"
-                img-class="h-8 w-8 rounded-full object-contain" />
+              <AppImage
+                v-if="brand.logo_url"
+                :src="brand.logo_url"
+                :alt="brand.name"
+                img-class="h-8 w-8 rounded-full object-contain"
+              />
               <span class="text-sm font-semibold">{{ brand.name }}</span>
             </div>
           </div>
@@ -102,11 +142,17 @@
 
         <!-- Shop by Category tile -->
         <div class="bento-tile lg:col-span-2">
-          <router-link class="bento-tile-link" to="/products" aria-label="Browse all products">↗</router-link>
+          <router-link class="bento-tile-link" to="/products" aria-label="Browse all products"
+            >↗</router-link
+          >
           <p class="bento-tile-title">Shop by Category</p>
           <div v-if="categories.length" class="flex flex-wrap gap-2">
-            <span v-for="category in categories" :key="category.id" class="eyebrow-pill eyebrow-pill-sm">{{
-              category.name }}</span>
+            <span
+              v-for="category in categories"
+              :key="category.id"
+              class="eyebrow-pill eyebrow-pill-sm"
+              >{{ category.name }}</span
+            >
           </div>
           <p v-else-if="heroWidgetsLoading" class="text-sm text-subtle">Loading categories…</p>
           <p v-else class="text-sm text-subtle">No categories available yet.</p>
@@ -115,8 +161,11 @@
     </section>
 
     <section class="mx-auto mt-10 max-w-6xl">
-      <PageHeader eyebrow="Featured" title="Bestsellers for the season"
-        description="Every featured pick includes quick add-to-cart actions and a premium product card experience.">
+      <PageHeader
+        eyebrow="Featured"
+        title="Bestsellers for the season"
+        description="Every featured pick includes quick add-to-cart actions and a premium product card experience."
+      >
         <template #action>
           <router-link class="btn btn-ghost btn-sm" to="/products">View all</router-link>
         </template>

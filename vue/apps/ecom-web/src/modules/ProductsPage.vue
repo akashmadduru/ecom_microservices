@@ -11,7 +11,8 @@
           <label class="form-control">
             <span class="label-text">Sort by</span>
             <select class="select select-bordered" :value="sortFilter" @change="onSortChange">
-              <option v-for="option in sortOptions" :key="option.value" :value="option.value">{{ option.label }}
+              <option v-for="option in sortOptions" :key="option.value" :value="option.value">
+                {{ option.label }}
               </option>
             </select>
           </label>
@@ -24,12 +25,28 @@
             </div>
             <div class="price-slider">
               <div class="price-slider-track"></div>
-              <div class="price-slider-fill" :style="{ left: minPercent + '%', right: (100 - maxPercent) + '%' }">
-              </div>
-              <input v-model.number="minPrice" type="range" :min="PRICE_MIN" :max="PRICE_MAX" :step="PRICE_STEP"
-                class="price-slider-input text-primary" @change="onMinPriceChange" />
-              <input v-model.number="maxPrice" type="range" :min="PRICE_MIN" :max="PRICE_MAX" :step="PRICE_STEP"
-                class="price-slider-input text-primary" @change="onMaxPriceChange" />
+              <div
+                class="price-slider-fill"
+                :style="{ left: minPercent + '%', right: 100 - maxPercent + '%' }"
+              ></div>
+              <input
+                v-model.number="minPrice"
+                type="range"
+                :min="PRICE_MIN"
+                :max="PRICE_MAX"
+                :step="PRICE_STEP"
+                class="price-slider-input text-primary"
+                @change="onMinPriceChange"
+              />
+              <input
+                v-model.number="maxPrice"
+                type="range"
+                :min="PRICE_MIN"
+                :max="PRICE_MAX"
+                :step="PRICE_STEP"
+                class="price-slider-input text-primary"
+                @change="onMaxPriceChange"
+              />
             </div>
           </div>
 
@@ -40,12 +57,18 @@
 
           <div class="form-control">
             <span class="label-text">Category</span>
-            <CategoryTreeFilter :model-value="categoryFilter" @update:model-value="onCategoryFilterChange" />
+            <CategoryTreeFilter
+              :model-value="categoryFilter"
+              @update:model-value="onCategoryFilterChange"
+            />
           </div>
 
           <div class="form-control">
             <span class="label-text">Brand</span>
-            <BrandFilterScroller :model-value="brandFilter" @update:model-value="onBrandFilterChange" />
+            <BrandFilterScroller
+              :model-value="brandFilter"
+              @update:model-value="onBrandFilterChange"
+            />
           </div>
 
           <button class="btn btn-outline" @click="clearAll">Clear filters</button>
@@ -53,34 +76,64 @@
       </aside>
 
       <section class="space-y-6">
-        <PageHeader eyebrow="Catalog" title="Shop the latest collection"
-          description="Discover products with filters, smart sorting, and quick purchase actions.">
+        <PageHeader
+          eyebrow="Catalog"
+          title="Shop the latest collection"
+          description="Discover products with filters, smart sorting, and quick purchase actions."
+        >
         </PageHeader>
 
         <div v-if="activeChips.length" class="flex flex-wrap items-center gap-2">
-          <span v-for="chip in activeChips" :key="chip.key"
-            class="eyebrow-pill eyebrow-pill-sm flex items-center gap-2">
+          <span
+            v-for="chip in activeChips"
+            :key="chip.key"
+            class="eyebrow-pill eyebrow-pill-sm flex items-center gap-2"
+          >
             {{ chip.label }}
-            <button class="text-base-content/60 hover:text-base-content" :aria-label="`Remove ${chip.label} filter`"
-              @click="chip.remove">✕</button>
+            <button
+              class="text-base-content/60 hover:text-base-content"
+              :aria-label="`Remove ${chip.label} filter`"
+              @click="chip.remove"
+            >
+              ✕
+            </button>
           </span>
-          <button class="text-sm text-muted underline hover:text-base-content" @click="clearAll">Clear all</button>
+          <button class="text-sm text-muted underline hover:text-base-content" @click="clearAll">
+            Clear all
+          </button>
         </div>
 
-        <SkeletonGrid v-if="controller.loading.value && !controller.items.value.length" :count="6" />
+        <SkeletonGrid
+          v-if="controller.loading.value && !controller.items.value.length"
+          :count="6"
+        />
 
-        <ErrorState v-else-if="controller.error.value" :message="controller.error.value"
-          :on-retry="() => controller.refresh()" />
+        <ErrorState
+          v-else-if="controller.error.value"
+          :message="controller.error.value"
+          :on-retry="() => controller.refresh()"
+        />
 
-        <EmptyState v-else-if="controller.isEmpty.value" title="No products match your filters"
-          description="Try adjusting or clearing your filters to see more results." />
+        <EmptyState
+          v-else-if="controller.isEmpty.value"
+          title="No products match your filters"
+          description="Try adjusting or clearing your filters to see more results."
+        />
 
         <div v-else class="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-          <ProductCard v-for="product in controller.items.value" :key="product.id" :product="product" />
+          <ProductCard
+            v-for="product in controller.items.value"
+            :key="product.id"
+            :product="product"
+          />
         </div>
 
-        <PaginationComponent v-if="controller.items.value.length" :pagination="controller.pagination.value"
-          item-label="products" @change="controller.setPage" />
+        <PaginationComponent
+          v-if="controller.items.value.length"
+          :pagination="controller.pagination.value"
+          item-label="products"
+          @change="controller.setPage"
+        />
       </section>
     </div>
   </div>
@@ -276,7 +329,6 @@ const activeChips = computed<FilterChip[]>(() => {
 
   return chips
 })
-
 </script>
 
 <style scoped>

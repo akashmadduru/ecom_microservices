@@ -19,5 +19,7 @@ COPY --chown=appuser:appuser deploy/docker/entrypoint.sh /app/entrypoint.sh
 ENV PATH="/app/.venv/bin:$PATH"
 USER appuser
 EXPOSE 8003
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 CMD \
+  python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8003/healthz',timeout=2).status==200 else 1)"
 ENTRYPOINT ["/app/entrypoint.sh"]
 CMD ["uvicorn", "product_service.main:app", "--host", "0.0.0.0", "--port", "8003"]

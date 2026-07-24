@@ -1,5 +1,5 @@
 {
-  "name": "ecom-microservices-web",
+  "name": "ecom-web",
   "private": true,
   "workspaces": ["apps/*", "packages/*"],
   "devDependencies": {

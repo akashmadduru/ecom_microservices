@@ -6,7 +6,9 @@
           <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
               <p class="section-kicker section-kicker-sm">Account</p>
-              <h1 class="text-3xl font-semibold text-base-content">{{ ecommerceStore.profile.name }}</h1>
+              <h1 class="text-3xl font-semibold text-base-content">
+                {{ ecommerceStore.profile.name }}
+              </h1>
               <p class="text-sm text-muted">{{ ecommerceStore.profile.email }}</p>
             </div>
             <button class="btn btn-outline">Edit profile</button>
@@ -19,11 +21,15 @@
           <div class="card-body">
             <h2 class="text-xl font-semibold text-base-content">Profile details</h2>
             <div class="mt-4 space-y-3 text-sm">
-              <div class="flex justify-between"><span>Phone</span><span>{{ ecommerceStore.profile.phone }}</span></div>
-              <div class="flex justify-between"><span>Member since</span><span>{{ ecommerceStore.profile.memberSince
-                  }}</span></div>
-              <div class="flex justify-between"><span>Preferred payment</span><span>{{ ecommerceStore.profile.payment
-                  }}</span></div>
+              <div class="flex justify-between">
+                <span>Phone</span><span>{{ ecommerceStore.profile.phone }}</span>
+              </div>
+              <div class="flex justify-between">
+                <span>Member since</span><span>{{ ecommerceStore.profile.memberSince }}</span>
+              </div>
+              <div class="flex justify-between">
+                <span>Preferred payment</span><span>{{ ecommerceStore.profile.payment }}</span>
+              </div>
             </div>
           </div>
         </div>

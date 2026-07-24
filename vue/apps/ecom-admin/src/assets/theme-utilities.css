@@ -1,0 +1,361 @@
+/*
+ * Shared Tailwind v4 utility layer for the ecommerce theme.
+ * - `@utility` blocks are atomic, variant-composable utilities (hover:, md:, etc. all work).
+ * - `@layer components` blocks are hand-written CSS component classes, matching the
+ *   existing plain-class pattern `.card` / `.btn-primary` already established in
+ *   main.css (no `@apply`, so there's nothing extra to maintain beyond this file and
+ *   call sites stay simple, one class instead of a long repeated utility cluster).
+ *
+ * Extraction convention (3 tiers), for future additions to this theme:
+ *   1. Inline Tailwind — default for 1–2 occurrences, anything needing per-instance
+ *      variants, or generic layout primitives with no semantic identity (e.g.
+ *      `flex items-center justify-between` stays inline: too generic, no named
+ *      identity, and variant composability is worth more here than a fixed class).
+ *   2. `@utility` atomic class — one repeated value/tight property pair that must
+ *      stay variant-composable (`.text-muted`, `.shadow-soft`, `.field-error`,
+ *      `.form-row-2`).
+ *   3. `@layer components` class — a repeated structural cluster (3+ properties,
+ *      layout+color+radius+shadow) representing a named UI pattern (`.surface-card`,
+ *      `.data-panel`, `.form-field`).
+ *   Extraction threshold: 3+ occurrences AND a named pattern AND no per-instance
+ *   variant need.
+ *
+ * File-split trigger: keep this as one file while the atomic/components sections
+ * each stay under ~15–20 classes and the total file stays under ~500 lines; split
+ * into `theme-utilities.css` (atomic) + `theme-components.css` (structural) if
+ * either threshold is crossed.
+ */
+
+/* ---------------------------------------------------------------------- */
+/* Atomic utilities                                                        */
+/* ---------------------------------------------------------------------- */
+
+/* Canonical "muted" body/secondary text — normalizes the dominant 70%-opacity
+   base-content text found across ~19 files into one utility. */
+@utility text-muted {
+  color: color-mix(in srgb, var(--color-base-content) 70%, transparent);
+}
+
+/* Canonical smaller-print text — normalizes the 60%-opacity (and, where
+   genuinely equivalent, 50%/40%) variants used for fine print, labels, and
+   hint text. Deliberately quieter one-off uses (e.g. a decorative breadcrumb
+   separator) are left as explicit opacity values rather than forced here. */
+@utility text-subtle {
+  color: color-mix(in srgb, var(--color-base-content) 60%, transparent);
+}
+
+/* Soft section divider: `border-t border-base-300`. */
+@utility divider-soft {
+  border-top: 1px solid var(--color-base-300);
+}
+
+/* Soft rest-state shadow — the app's sitewide low-contrast card shadow,
+   for elements that need it explicitly (not already covered by `.card`/
+   `.navbar` in main.css). */
+@utility shadow-soft {
+  box-shadow: var(--shadow-soft-rest);
+}
+
+/* Field validation message: `text-xs text-error`. */
+@utility field-error {
+  font-size: 0.75rem;
+  color: var(--color-error);
+}
+
+/* Two-column form row, single column on mobile: `grid gap-4 md:grid-cols-2`. */
+@utility form-row-2 {
+  display: grid;
+  gap: 1rem;
+
+  @media (min-width: 768px) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* ---------------------------------------------------------------------- */
+/* Component classes                                                       */
+/* ---------------------------------------------------------------------- */
+
+@layer components {
+  /* Rounded-full uppercase label pill (PageHeader eyebrow, section badges). */
+  .eyebrow-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    border-radius: 9999px;
+    border: 1px solid color-mix(in srgb, var(--color-accent) 30%, transparent);
+    background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+    padding: 0.25rem 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3em;
+    color: var(--color-primary);
+  }
+
+  /* Smaller size modifier — pair with `.eyebrow-pill` (e.g. ProductCard category badge). */
+  .eyebrow-pill-sm {
+    gap: 0;
+    padding: 0.25rem 0.625rem;
+    font-size: 0.625rem;
+    letter-spacing: 0.25em;
+  }
+
+  /* Small uppercase section label ("Admin", "Catalog", ...). */
+  .section-kicker {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3em;
+    color: var(--color-primary);
+  }
+
+  /* Larger size modifier — pair with `.section-kicker` (e.g. ProductPage
+     category label, auth page eyebrow copy). */
+  .section-kicker-sm {
+    font-size: 0.875rem;
+  }
+
+  /* Flat bordered surface panel used for page sections/cards. */
+  .surface-card {
+    border-radius: 1.6rem;
+    border: 1px solid var(--color-base-300);
+    background: var(--color-base-100);
+    padding: 1.5rem;
+    box-shadow: var(--shadow-soft-rest);
+  }
+
+  /* Centered/padded variant for empty/error state panels. */
+  .surface-card-centered {
+    padding: 2.5rem;
+    text-align: center;
+  }
+
+  /* Non-`.card` bordered wrapper for report/table panels (rounder corners
+     than `.surface-card`, no padding — the panel's own content, e.g.
+     `DataTable`, owns its internal spacing). */
+  .data-panel {
+    overflow: hidden;
+    border-radius: 1.5rem;
+    border: 1px solid var(--color-base-300);
+    background: var(--color-base-100);
+    box-shadow: var(--shadow-soft-rest);
+  }
+
+  /* Label + input + optional error stack (form field wrapper). */
+  .form-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  /* Soft inline error alert used on admin/auth forms. */
+  .alert-soft-error {
+    border-radius: 1rem;
+    border: 1px solid color-mix(in srgb, var(--color-error) 30%, transparent);
+    background: color-mix(in srgb, var(--color-error) 10%, transparent);
+    padding: 0.75rem;
+    font-size: 0.875rem;
+    color: var(--color-error-content);
+  }
+
+  /* AdminLayout sidebar nav link pair. */
+  .nav-link {
+    display: block;
+    border-radius: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    color: color-mix(in srgb, var(--color-base-content) 70%, transparent);
+    transition:
+      color 220ms ease,
+      background-color 220ms ease;
+  }
+
+  .nav-link:hover {
+    background: var(--color-base-200);
+    color: var(--color-base-content);
+  }
+
+  .nav-link-active {
+    background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+    font-weight: 600;
+    color: var(--color-primary);
+  }
+
+  /* "Rich column vs. short bullet list" pairing (hero/auth two-column rows).
+     `.card-body` is already a flex column stretched to the grid/flex row's
+     full height (`flex: auto`, from daisyUI's `.card`/`.card-body`); this
+     centers/distributes the shorter card's content within that height
+     instead of leaving it pinned to the top with dead space below, and
+     gives its bullet list a designed dot-marker treatment (in the brand
+     primary color, matching `.eyebrow-pill`/`.section-kicker`) instead of a
+     raw "•" text prefix. */
+  .feature-list-card {
+    justify-content: center;
+  }
+
+  .feature-list-card ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .feature-list-card li {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.65rem;
+  }
+
+  .feature-list-card li::before {
+    content: '';
+    flex-shrink: 0;
+    width: 0.4rem;
+    height: 0.4rem;
+    margin-top: 0.45rem;
+    border-radius: 9999px;
+    background: var(--color-primary);
+  }
+
+  /* Dense bento-grid supporting tile (HomeView hero). Same flat surface
+     treatment as `.surface-card` but tighter padding/gap suited to a
+     compact multi-tile grid instead of a full-width page section. */
+  .bento-tile {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    border-radius: 1.4rem;
+    border: 1px solid var(--color-base-300);
+    background: var(--color-base-100);
+    padding: 1.25rem;
+    box-shadow: var(--shadow-soft-rest);
+  }
+
+  /* Larger hero-copy variant of `.bento-tile` — roomier padding, vertically
+     centered content, and clipped overflow so the absolutely positioned
+     decorative dots never spill past the tile's rounded corners. */
+  .bento-tile-hero {
+    overflow: hidden;
+    justify-content: center;
+    gap: 1.5rem;
+    padding: 2.25rem;
+  }
+
+  /* Small circular corner "view more" affordance, echoing the reference's
+     arrow-link card icon — flat border only, no fill/shadow. */
+  .bento-tile-link {
+    position: absolute;
+    top: 0.9rem;
+    right: 0.9rem;
+    display: inline-flex;
+    height: 2rem;
+    width: 2rem;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9999px;
+    border: 1px solid var(--color-base-300);
+    font-size: 0.875rem;
+    color: var(--color-base-content);
+    transition:
+      transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
+      border-color 220ms ease;
+  }
+
+  .bento-tile-link:hover {
+    transform: translate(2px, -2px);
+    border-color: var(--color-primary);
+  }
+
+  /* Compact uppercase tile heading — mirrors `.section-kicker` but sized
+     for a bento tile instead of a full section. */
+  .bento-tile-title {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    color: var(--color-primary);
+  }
+
+  /* "01 ──▸ description" numbered feature callout (HomeView hero): a
+     number, a flat line-plus-arrow-tick connector, and short copy — no
+     icon asset needed. */
+  .hero-feature-callout {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+  }
+
+  .hero-feature-number {
+    font-size: 1.5rem;
+    font-weight: 800;
+    line-height: 1;
+  }
+
+  .hero-connector {
+    position: relative;
+    display: inline-block;
+    width: 2.25rem;
+    height: 1px;
+    flex-shrink: 0;
+    background: color-mix(in srgb, var(--color-base-content) 45%, transparent);
+  }
+
+  .hero-connector::after {
+    content: '';
+    position: absolute;
+    top: -3px;
+    right: 0;
+    width: 6px;
+    height: 6px;
+    border-top: 1px solid var(--color-base-content);
+    border-right: 1px solid var(--color-base-content);
+    opacity: 0.7;
+    transform: rotate(45deg);
+  }
+
+  /* Primary hero CTA pill — the vibrant lime fill, sitewide `--color-accent`
+     now that the palette has been extended app-wide (fill-only, never
+     text/link/border — see main.css theme comments). */
+  .hero-cta-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    border-radius: 9999px;
+    border: none;
+    background: var(--color-accent);
+    padding: 0.75rem 1.75rem;
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--color-base-content);
+    transition:
+      transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
+      box-shadow 220ms ease;
+  }
+
+  .hero-cta-pill:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 14px color-mix(in srgb, var(--color-accent) 55%, transparent);
+  }
+
+  /* Paired circular arrow-icon button, dark/black like the reference —
+     reuses the existing `--color-neutral` token (already the same dark
+     tone as `--color-base-content`) rather than inventing a second new
+     color for this redesign. */
+  .hero-cta-arrow {
+    display: inline-flex;
+    flex-shrink: 0;
+    height: 2.75rem;
+    width: 2.75rem;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9999px;
+    border: none;
+    background: var(--color-neutral);
+    color: var(--color-neutral-content);
+    transition: transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  .hero-cta-arrow:hover {
+    transform: translateX(3px);
+  }
+}

@@ -250,7 +250,8 @@ export const useInventoryStore = defineStore('inventory', () => {
   }
 
   function next() {
-    if (pagination.value.has_next && pagination.value.next_page) fetchList(pagination.value.next_page)
+    if (pagination.value.has_next && pagination.value.next_page)
+      fetchList(pagination.value.next_page)
   }
 
   function previous() {

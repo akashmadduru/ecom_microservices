@@ -1,0 +1,11 @@
+# Standalone ignore file so this project works when copied out of the monorepo.
+node_modules
+.nuxt
+.output
+.data
+dist
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
