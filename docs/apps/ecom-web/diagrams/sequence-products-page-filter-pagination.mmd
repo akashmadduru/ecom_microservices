@@ -1,0 +1,39 @@
+%% ProductsPage server-side filter + pagination flow
+%% Renders with: npx @mermaid-js/mermaid-cli -i sequence-products-page-filter-pagination.mmd -o sequence-products-page-filter-pagination.svg
+sequenceDiagram
+    autonumber
+    actor User
+    participant Page as ProductsPage.vue
+    participant Ctrl as useListController
+    participant Api as ProductsApi.getProducts
+    participant BE as Backend (GET /products)
+
+    User->>Page: Change filter (category / brand / price / sort)
+    Page->>Ctrl: setFilter(key, value)
+
+    Note over Ctrl: Filter/sort change only -\nsetPage() never resets page
+    Ctrl->>Ctrl: page = 1
+
+    Note over Ctrl: Race protection
+    Ctrl->>Ctrl: abort previous AbortController (if in-flight)
+    Ctrl->>Ctrl: new AbortController for this request
+
+    Note over Ctrl: fetcher closure - 1:1 field mapping,\nno translation layer
+    Ctrl->>Ctrl: build ProductFilterParams\n{category_id, brand_id, min_price, max_price, sort}\nfrom controller.filters
+
+    Ctrl->>Api: getProducts(page, pageSize, params, signal)
+    Api->>BE: GET /products?page&page_size&category_id&brand_id&min_price&max_price&sort
+
+    alt request superseded by a newer filter change
+        BE-->>Api: (response arrives late)
+        Api-->>Ctrl: (result discarded - requestId stale / signal aborted)
+    else request is still the latest
+        BE-->>Api: { products, pagination } (single filtered query)
+        Api-->>Ctrl: { products, pagination }
+        Note over Ctrl: Atomic update -\nsame response feeds both
+        Ctrl->>Ctrl: items = products\npagination = pagination
+        Ctrl-->>Page: reactive items + pagination updated
+        Page->>Page: re-render product grid (from items)
+        Page->>Page: re-render PaginationComponent (from pagination)
+        Note over Page: Grid and pager always agree -\nsourced from the same response
+    end

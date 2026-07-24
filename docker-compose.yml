@@ -45,7 +45,7 @@ services:
   api-gateway:
     build:
       context: .
-      dockerfile: services/api_gateway/Dockerfile
+      dockerfile: python/services/api_gateway/Dockerfile
     container_name: api-gateway
     restart: unless-stopped
     depends_on:
@@ -99,7 +99,7 @@ services:
   auth-service:
     build:
       context: .
-      dockerfile: services/auth_service/Dockerfile
+      dockerfile: python/services/auth_service/Dockerfile
     container_name: auth-service
     restart: unless-stopped
     depends_on:
@@ -119,7 +119,7 @@ services:
   product-service:
     build:
       context: .
-      dockerfile: services/product_service/Dockerfile
+      dockerfile: python/services/product_service/Dockerfile
     container_name: product-service
     restart: unless-stopped
     depends_on:
@@ -146,7 +146,7 @@ services:
   inventory-service:
     build:
       context: .
-      dockerfile: services/inventory_service/Dockerfile
+      dockerfile: python/services/inventory_service/Dockerfile
     container_name: inventory-service
     restart: unless-stopped
     depends_on:

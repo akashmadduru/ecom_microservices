@@ -9,8 +9,8 @@ Related docs: `docs/changes/2026-07-22-catalog-full-seed-generator.md` (file-lev
 changelog), `docs/DecisionLog.md` (rationale for the tradeoffs below),
 `docs/FutureWork.md` (deferred follow-ups, including the accepted startup-blocking
 tradeoff), `docs/features/product-catalog-core-phase1.md` (the schema this feature
-seeds data into), `docs/product_service_docs/hld/HLD.md` /
-`docs/product_service_docs/lld/LLD.md` (updated component/endpoint tables).
+seeds data into), `docs/services/product-service/hld/HLD.md` /
+`docs/services/product-service/lld/LLD.md` (updated component/endpoint tables).
 
 ## Summary
 

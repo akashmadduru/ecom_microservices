@@ -30,7 +30,7 @@ as a fact with a file citation, not an inference.
 (`auth_service:8001`, `product_service:8003`, `inventory_service:8004`,
 `api_gateway:8080`) with per-service Postgres databases, a single-broker Kafka instance
 (`docker-compose.yml`'s `kafka` service: `KAFKA_NODE_ID: 1`, one node acting as both
-broker and controller), and `libs/ecom_common` as shared code. `terraform/eks.tf`
+broker and controller), and `python/libs/ecom_common` as shared code. `terraform/eks.tf`
 defines an EKS cluster but nothing is provisioned from it — there is no live Kubernetes,
 no service mesh, and no production traffic. A pattern is marked **"already adopted"**
 only if there is a code citation proving it; **"applicable now"** if it fits the current
@@ -80,8 +80,8 @@ recurring building blocks: a canonical event envelope, one topic per aggregate
 partitioned for per-entity ordering, idempotent consumers, and a dead-letter path for
 poison messages.
 
-This repo's actual event design (`libs/ecom_common/src/ecom_common/events.py` and
-`libs/ecom_common/src/ecom_common/kafka.py`) already implements the core of this
+This repo's actual event design (`python/libs/ecom_common/src/ecom_common/events.py` and
+`python/libs/ecom_common/src/ecom_common/kafka.py`) already implements the core of this
 pattern set:
 
 | Industry pattern | This repo's implementation | Status |

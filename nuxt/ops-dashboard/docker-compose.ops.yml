@@ -1,0 +1,150 @@
+# Batteries-included run recipe for the ops-dashboard.
+#
+#   OPS_API_TOKEN=$(openssl rand -hex 32) docker compose -f docker-compose.ops.yml up --build
+#
+# Security posture (see README for the full rationale):
+#   - The dashboard NEVER sees /var/run/docker.sock. Only the socket-proxy does.
+#   - The socket-proxy is default-deny and only allows the read-style API
+#     sections enabled below.
+#   - Both services sit on a dedicated `ops_network`, isolated from the app's
+#     `ecom_network`.
+#   - The dashboard port is published to 127.0.0.1 only (loopback) — never
+#     0.0.0.0, never reachable from other hosts or other networks.
+
+name: ops-dashboard
+
+services:
+  docker-socket-proxy:
+    # Pinned, not `:latest`: the whole least-privilege argument for this proxy
+    # rests on this exact image's haproxy.cfg ACL behavior. A silent `:latest`
+    # bump on the next `up --build` could change that behavior without anyone
+    # noticing. Bump deliberately, re-verify the ACL semantics, then update.
+    image: tecnativa/docker-socket-proxy:v0.4.2
+    container_name: ops-docker-socket-proxy
+    restart: unless-stopped
+    environment:
+      # Default-deny image: every section is 0 unless explicitly enabled here.
+      # Enable ONLY the read-style sections the dashboard needs:
+      CONTAINERS: 1   # GET /containers, /containers/{id}/json (inspect), /containers/{id}/logs
+      NETWORKS: 1     # GET /networks
+      VOLUMES: 1      # GET /volumes
+      PING: 1         # GET /_ping (readiness probe)
+      # INFO deliberately NOT enabled: nothing in this dashboard calls GET
+      # /info (health/readiness uses PING). Least privilege — only grant a
+      # section once something actually calls it.
+      #
+      # This proxy is READ-ONLY, full stop: POST stays 0 here always. Phase 2
+      # mutating controls (stop/start/restart) are served by a SEPARATE,
+      # dedicated proxy below (docker-socket-proxy-mutate) — see its comment
+      # for why one shared proxy config can't safely do both.
+    volumes:
+      # :ro makes the socket *file* read-only. That alone does NOT make the
+      # Docker API read-only (the API is still fully privileged) — the proxy's
+      # allowlist above is what actually enforces read-only. We mount :ro anyway
+      # as defense in depth.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - ops_network
+    # Not published to the host: only the dashboard (same network) talks to it.
+
+  # ---------------------------------------------------------------------------
+  # Phase 2 mutating controls (stop / start / restart). OFF BY DEFAULT.
+  # A SEPARATE proxy instance from docker-socket-proxy above — deliberately,
+  # not for symmetry. Verified against the real tecnativa/docker-socket-proxy
+  # haproxy.cfg:
+  #   - The proxy denies ALL non-GET requests up front unless POST=1. So the
+  #     ALLOW_START/ALLOW_STOP/ALLOW_RESTARTS toggles only take effect once
+  #     POST is enabled.
+  #   - BUT CONTAINERS matches the broad `/containers` prefix for BOTH GET and
+  #     POST, with no method-level carve-out. A single proxy with CONTAINERS=1
+  #     (needed for reads/inspect/logs) + POST=1 (needed for mutations) would
+  #     ALSO admit POST /containers/create and /containers/prune — i.e. it
+  #     would reopen exactly the host-root-equivalent capability the read-only
+  #     proxy exists to prevent.
+  #   - ALLOW_START / ALLOW_STOP / ALLOW_RESTARTS, however, are INDEPENDENT,
+  #     path-specific rules (they match only
+  #     /containers/{id}/(start|stop|restart|kill)) that do NOT require
+  #     CONTAINERS=1 to work.
+  # So: this proxy runs with CONTAINERS=0 (and every other section 0) and ONLY
+  # the three ALLOW_* toggles enabled. Even with POST=1, it can reach *only*
+  # the specific start/stop/restart/kill sub-paths on a container it's given
+  # the ID for — no create, no prune, no exec, no image/build, no list, no
+  # inspect. Genuine proxy-layer least privilege, not just an app-layer promise.
+  #
+  # RESIDUAL RISK, stated plainly (security review finding, not fixable by more
+  # proxy config — the Docker Engine has no per-container ACL): this proxy
+  # restricts WHICH VERBS are reachable, but not WHICH CONTAINER IDS they can
+  # target — that scoping (OPS_MANAGED_SERVICES) lives ONLY in the dashboard's
+  # app layer (see mutation-guard.ts). A compromised dashboard PROCESS (not
+  # just a request without a token) could call this proxy directly and
+  # stop/start/restart/kill ANY container on the host, allowlist notwithstanding.
+  # This is why mutations are off by default and should only be enabled for the
+  # specific window an operator actually needs them. Also note ALLOW_RESTARTS
+  # covers kill in addition to stop/restart — the app exposes no kill route,
+  # but the proxy itself would accept one from anything that can reach it.
+  # ---------------------------------------------------------------------------
+  docker-socket-proxy-mutate:
+    # See the read-only proxy's image-pinning comment above — same reasoning.
+    image: tecnativa/docker-socket-proxy:v0.4.2
+    container_name: ops-docker-socket-proxy-mutate
+    restart: unless-stopped
+    environment:
+      CONTAINERS: 0   # explicit: NOT the broad /containers GET/POST prefix
+      POST: ${OPS_PROXY_POST:-0}
+      ALLOW_START: ${OPS_PROXY_ALLOW_START:-0}
+      ALLOW_STOP: ${OPS_PROXY_ALLOW_STOP:-0}
+      ALLOW_RESTARTS: ${OPS_PROXY_ALLOW_RESTARTS:-0}
+      # Everything below defaults to the safe/disabled state; enabling
+      # mutations is a deliberate, informed operator opt-in. To turn them on
+      # end to end, set OPS_PROXY_POST=1 AND the three ALLOW_* vars=1 AND, on
+      # the dashboard service, OPS_ALLOW_MUTATIONS=true with a non-empty
+      # OPS_MANAGED_SERVICES. See README for the full rationale.
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - ops_network
+    # Not published to the host: only the dashboard (same network) talks to it.
+
+  ops-dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ops-dashboard
+    restart: unless-stopped
+    depends_on:
+      - docker-socket-proxy
+      - docker-socket-proxy-mutate
+    environment:
+      # REQUIRED — no default; the API fails closed (503) if this is unset.
+      OPS_API_TOKEN: ${OPS_API_TOKEN:?set OPS_API_TOKEN in the environment or a .env file}
+      DOCKER_HOST: docker-socket-proxy
+      DOCKER_PORT: "2375"
+      # SEPARATE client/proxy for mutations — never reuse DOCKER_HOST/PORT
+      # above for this. See docker-socket-proxy-mutate's comment and
+      # server/runtime/config.ts's mutateDockerHost doc comment.
+      MUTATE_DOCKER_HOST: docker-socket-proxy-mutate
+      MUTATE_DOCKER_PORT: "2375"
+      # Phase 2 mutation gate — BOTH must be set to actually enable mutations,
+      # and both default to the safe/disabled state:
+      #   - OPS_ALLOW_MUTATIONS: global kill switch. Only the exact string
+      #     "true" enables mutations; anything else (including unset) => every
+      #     mutating endpoint returns 403 without even checking the allowlist.
+      #   - OPS_MANAGED_SERVICES: comma-separated compose service names allowed
+      #     to be mutated (matches the `com.docker.compose.service` label).
+      #     Empty (the default) => nothing is mutable even when the switch is on.
+      # These are the app-layer control; they are independent of, and
+      # additional to, the mutate-proxy's own ALLOW_* toggles above — both
+      # layers must agree before anything actually happens.
+      OPS_ALLOW_MUTATIONS: ${OPS_ALLOW_MUTATIONS:-false}
+      OPS_MANAGED_SERVICES: ${OPS_MANAGED_SERVICES:-}
+    ports:
+      # Loopback-only publish. Reachable at http://127.0.0.1:9010 on the host,
+      # nowhere else. 3000 is Nitro's in-container listen port.
+      - "127.0.0.1:9010:3000"
+    networks:
+      - ops_network
+
+networks:
+  # Dedicated, isolated bridge. Deliberately NOT the app's ecom_network.
+  ops_network:
+    driver: bridge

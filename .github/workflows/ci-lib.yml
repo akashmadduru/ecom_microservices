@@ -1,0 +1,29 @@
+name: lib CI
+
+# Deliberately no python/libs/ecom_common or python/pyproject.toml in these path filters —
+# this component must never fire on a Python-only change, and vice versa.
+on:
+  pull_request:
+    paths:
+      - 'vue/packages/lib/**'
+      - '.github/workflows/ci-lib.yml'
+      - '.github/workflows/_reusable-node-package-ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'vue/packages/lib/**'
+      - '.github/workflows/ci-lib.yml'
+      - '.github/workflows/_reusable-node-package-ci.yml'
+
+concurrency:
+  group: ci-lib-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-test:
+    uses: ./.github/workflows/_reusable-node-package-ci.yml
+    permissions:
+      contents: read
+    with:
+      workspace-root: vue
+      workspace-name: lib

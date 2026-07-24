@@ -1,0 +1,24 @@
+{
+  "extends": "@vue/tsconfig/tsconfig.dom.json",
+  "include": ["src/**/*", "src/**/*.vue"],
+  "compilerOptions": {
+    // Extra safety for array and object lookups, but may have false positives.
+    "noUncheckedIndexedAccess": true,
+
+    // `components/image.ts` imports `./placeholder-product.svg` as a module;
+    // consuming apps get the asset-module ambient typing via their own
+    // `env.d.ts` (`/// <reference types="vite/client" />`), but this package
+    // is type-checked standalone, outside any app, so it needs the reference
+    // itself.
+    "types": ["vite/client"],
+
+    // Path mapping so `lib`'s own source can import itself the same way its
+    // consumers do (e.g. `import EmptyState from 'lib/components/EmptyState.vue'`),
+    // plus the locked type-only dependency on `core` (e.g. `Pagination`,
+    // `ListControllerResult<T>`).
+    "paths": {
+      "lib/*": ["./src/*"],
+      "core/*": ["../core/src/*"]
+    }
+  }
+}

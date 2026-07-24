@@ -1,0 +1,170 @@
+/*
+ * Ecommerce light theme — flat & minimal, white/gray duotone brand accent.
+ * Primary/secondary/accent are all neutral greys, chosen for WCAG AA text contrast.
+ * daisyUI v5 CSS-based theme (see https://daisyui.com/docs/themes/).
+ */
+@plugin "daisyui/theme" {
+  name: 'meadow';
+  default: true;
+  prefersdark: false;
+  color-scheme: light;
+
+  /* Surfaces: white page, light grey cards, soft grey section + border tones */
+  --color-base-100: #ffffff;
+  --color-base-200: #f4f4f5;
+  --color-base-300: #e4e4e7;
+  --color-base-content: #18181b; /* near-black warm charcoal, not pure black */
+
+  /* Brand accent — near-black grey, high contrast against base-100 for legible
+     text/buttons/links, well above the 4.5:1 AA floor. */
+  --color-primary: #27272a;
+  --color-primary-content: #fafafa;
+
+  /* Brand accent — muted mid-tone grey: lighter than primary, darker than base-300,
+     AA contrast with its dark content color. */
+  --color-secondary: #a1a1aa;
+  --color-secondary-content: #18181b;
+
+  /* Decorative/tint accent — a light neutral grey, used for
+     badges/hover fills only, paired with dark content text for contrast. */
+  --color-accent: #d4d4d8;
+  --color-accent-content: #18181b;
+
+  --color-neutral: #18181b;
+  --color-neutral-content: #fafafa;
+
+  --color-info: #2b7fb8;
+  --color-info-content: #f2fbff;
+  --color-success: #2f9e6d;
+  --color-success-content: #f2fff9;
+  --color-warning: #d08700;
+  --color-warning-content: #fffaf0;
+  --color-error: #dc4b5f;
+  --color-error-content: #fff5f6;
+
+  --radius-selector: 1rem;
+  --radius-field: 0.9rem;
+  --radius-box: 1.25rem;
+  --border: 1px;
+}
+
+@theme {
+  --font-sans: 'Quicksand', 'Helvetica Neue', sans-serif;
+}
+
+.card,
+.navbar {
+  border-radius: var(--radius-box);
+}
+
+.btn,
+.input,
+.select,
+.textarea {
+  border-radius: var(--radius-field);
+}
+
+.navbar {
+  background: var(--color-base-100);
+  border: 1px solid var(--color-base-300);
+  box-shadow: var(--shadow-soft-rest);
+}
+
+.card {
+  background: color-mix(in srgb, var(--color-base-100) 92%, transparent);
+  border: 1px solid var(--color-base-300);
+  box-shadow: var(--shadow-soft-rest);
+}
+
+.card {
+  will-change: transform, box-shadow;
+  transition:
+    transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 260ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    border-color 260ms ease;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-soft-hover);
+}
+
+.card img {
+  transition:
+    transform 480ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    filter 480ms ease;
+}
+
+.card:hover img {
+  transform: scale(1.03);
+}
+
+.btn,
+.input,
+.select,
+.textarea {
+  transition:
+    transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    background-color 220ms ease,
+    border-color 220ms ease;
+}
+
+.btn {
+  box-shadow: none;
+}
+
+.btn:hover {
+  transform: translateY(-1px);
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #3f3f46 0%, #27272a 100%);
+  border: none;
+  color: #fafafa;
+  box-shadow: 0 2px 6px rgba(24, 24, 27, 0.25);
+}
+
+.btn-primary:hover {
+  box-shadow: 0 4px 12px rgba(24, 24, 27, 0.3);
+}
+
+.btn-outline,
+.btn-ghost {
+  color: var(--color-base-content);
+  border-color: var(--color-base-300);
+}
+
+.input,
+.select,
+.textarea {
+  background: var(--color-base-100);
+  border: 1px solid var(--color-base-300);
+  color: var(--color-base-content);
+}
+
+.input:focus,
+.select:focus,
+.textarea:focus {
+  border-color: var(--color-primary);
+  outline: none;
+}
+
+.input::placeholder,
+.textarea::placeholder,
+.select option {
+  color: color-mix(in srgb, var(--color-base-content) 50%, transparent);
+}
+
+.toast-enter-from,
+.toast-leave-to {
+  opacity: 0;
+  transform: translateY(16px) scale(0.98);
+}
+
+.toast-enter-active,
+.toast-leave-active {
+  transition:
+    opacity 260ms ease,
+    transform 260ms ease;
+}

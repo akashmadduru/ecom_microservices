@@ -1,0 +1,30 @@
+name: ecom-common CI
+
+on:
+  pull_request:
+    paths:
+      - 'python/libs/ecom_common/**'
+      - 'python/pyproject.toml'
+      - '.github/workflows/ci-ecom-common.yml'
+      - '.github/workflows/_reusable-python-lint-test.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'python/libs/ecom_common/**'
+      - 'python/pyproject.toml'
+      - '.github/workflows/ci-ecom-common.yml'
+      - '.github/workflows/_reusable-python-lint-test.yml'
+
+concurrency:
+  group: ci-ecom-common-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-test:
+    uses: ./.github/workflows/_reusable-python-lint-test.yml
+    permissions:
+      contents: read
+    with:
+      working-path: libs/ecom_common
+      package-name: ecom-common
+      run-integration-tests: false

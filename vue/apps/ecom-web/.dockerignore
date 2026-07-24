@@ -1,0 +1,10 @@
+node_modules
+dist
+.env
+.env.*
+.eslintcache
+coverage
+playwright-report
+test-results
+e2e
+.git

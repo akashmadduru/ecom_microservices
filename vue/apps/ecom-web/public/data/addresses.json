@@ -1,0 +1,22 @@
+[
+  {
+    "id": 1,
+    "label": "Home",
+    "type": "Primary",
+    "street": "12, River View Apartments",
+    "city": "Bengaluru",
+    "state": "Karnataka",
+    "pincode": "560001",
+    "phone": "+91 9876543210"
+  },
+  {
+    "id": 2,
+    "label": "Work",
+    "type": "Office",
+    "street": "88, Tech Park Road",
+    "city": "Hyderabad",
+    "state": "Telangana",
+    "pincode": "500081",
+    "phone": "+91 9912345678"
+  }
+]

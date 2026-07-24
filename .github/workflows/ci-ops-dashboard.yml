@@ -1,0 +1,70 @@
+name: ops-dashboard CI
+
+# Standalone project: deliberately does NOT use _reusable-node-app-ci.yml, which
+# assumes npm-workspace semantics ops-dashboard intentionally doesn't have. This
+# workflow does its own npm ci / lint / type-check / test / build. Path filter is
+# scoped to the project (plus this workflow file) so it never fires on unrelated
+# changes, and vice versa.
+on:
+  pull_request:
+    paths:
+      - 'vue/ops-dashboard/**'
+      - '.github/workflows/ci-ops-dashboard.yml'
+      - '.github/workflows/_reusable-docker-build-push.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'vue/ops-dashboard/**'
+      - '.github/workflows/ci-ops-dashboard.yml'
+      - '.github/workflows/_reusable-docker-build-push.yml'
+
+concurrency:
+  group: ci-ops-dashboard-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-test-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: vue/ops-dashboard
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: vue/ops-dashboard/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type-check
+        run: npm run type-check
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+  docker:
+    needs: [lint-test-build]
+    uses: ./.github/workflows/_reusable-docker-build-push.yml
+    permissions:
+      contents: read
+      packages: write
+    with:
+      # Standalone: the build context is the project directory itself; it needs
+      # nothing from outside vue/ops-dashboard.
+      context: vue/ops-dashboard
+      dockerfile-path: vue/ops-dashboard/Dockerfile
+      image-name: ghcr.io/${{ github.repository_owner }}/ecom-microservices-ops-dashboard
+      push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}

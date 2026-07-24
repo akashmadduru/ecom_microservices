@@ -25,7 +25,7 @@ FKs are explicitly deferred — see Known Limitations in the feature doc.
 ### Overview
 - **Bounded Context:** `product_service`
 - **Maturity Tag:** Built
-- **Grounding:** `services/product_service/src/product_service/models.py::Product`
+- **Grounding:** `python/services/product_service/src/product_service/models.py::Product`
 - **Phase 1 extension (Built):** `title` (renamed from `product_name`), a unique `slug`,
   nullable `brand_id`/`manufacturer_id`/`category_id` FKs, a `status` lifecycle enum
   (`DRAFT`/`PENDING_APPROVAL`/`PUBLISHED`/`REJECTED`/`ARCHIVED`/`DISCONTINUED`), SEO
@@ -130,7 +130,7 @@ including the Phase 1 taxonomy FKs alongside the still-present legacy free-text 
 ### Overview
 - **Bounded Context:** `product_service`
 - **Maturity Tag:** Built (promoted from Conceptual-only by Phase 1 Catalog Core)
-- **Grounding:** `services/product_service/src/product_service/models.py::Category`,
+- **Grounding:** `python/services/product_service/src/product_service/models.py::Category`,
   migration `0003_catalog_taxonomy.py`. The legacy `Product.category`/`Product.sub_category`
   free-text columns still exist unchanged alongside the new `categories` table and
   `Product.category_id` FK — see the Product domain's Relationships/Open Questions above.
@@ -214,7 +214,7 @@ including the Phase 1 taxonomy FKs alongside the still-present legacy free-text 
 ### Overview
 - **Bounded Context:** `product_service`
 - **Maturity Tag:** Built (promoted from Conceptual-only by Phase 1 Catalog Core)
-- **Grounding:** `services/product_service/src/product_service/models.py::Brand`,
+- **Grounding:** `python/services/product_service/src/product_service/models.py::Brand`,
   migration `0003_catalog_taxonomy.py`. The legacy `Product.brand` free-text column
   still exists unchanged alongside the new `brands` table and `Product.brand_id` FK.
 

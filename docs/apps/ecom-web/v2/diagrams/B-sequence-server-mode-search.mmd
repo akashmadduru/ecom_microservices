@@ -1,0 +1,48 @@
+%% Server-mode search + pagination (useListController)
+sequenceDiagram
+    autonumber
+    actor User as Admin User
+    participant Toolbar as AdminTableToolbar
+    participant Ctl as useListController
+    participant Guard as AbortController /<br/>request-id guard
+    participant Api as ProductsApi.getProducts
+    participant BE as Backend GET /products
+    participant DT as DataTable
+
+    Note over User,DT: SEARCH PATH (debounced)
+    User->>Toolbar: keystroke
+    Toolbar->>Ctl: setSearch(term)
+    activate Ctl
+    Ctl->>Ctl: search.value = term (sync)<br/>page = 1 (reset)
+    Ctl-->>DT: status = "loading" (optimistic)
+    deactivate Ctl
+    Note right of Ctl: debounce 300ms
+
+    Ctl->>Guard: run() — abort prior request,<br/>reqId = ++counter (monotonic)
+    activate Guard
+    Guard->>Api: fetcher(query, signal)
+    Note over Api,BE: free-text `search` is NOT sent —<br/>GET /products has no search param today<br/>(ESCALATION: not yet supported)
+    Api->>BE: GET /products?page=1&page_size=n&…
+    BE-->>Api: 200 { products, pagination }
+    Api-->>Guard: response
+    deactivate Guard
+
+    alt reqId is current (not superseded)
+        Guard->>Ctl: apply result
+        Ctl->>Ctl: items = data<br/>pagination = meta<br/>status = "success"
+        Ctl-->>DT: re-render rows + pagination
+    else reqId superseded by a newer run()
+        Guard-->>Guard: drop stale/late response<br/>(no state mutation)
+        Note right of Guard: prevents out-of-order overwrite
+    end
+
+    Note over User,DT: PAGINATION PATH (immediate, no debounce)
+    User->>Toolbar: click page n
+    Toolbar->>Ctl: setPage(n)
+    Ctl->>Guard: run() immediately (no debounce)
+    Guard->>Api: fetcher(query, signal)
+    Api->>BE: GET /products?page=n&page_size=…
+    BE-->>Api: 200 { products, pagination }
+    Api-->>Guard: response
+    Guard->>Ctl: apply (if current reqId)
+    Ctl-->>DT: re-render

@@ -1,0 +1,21 @@
+{
+  "extends": "@vue/tsconfig/tsconfig.dom.json",
+  "include": ["src/**/*"],
+  "compilerOptions": {
+    // Extra safety for array and object lookups, but may have false positives.
+    "noUncheckedIndexedAccess": true,
+
+    // `config/axios.ts` reads `import.meta.env.VITE_API_BASE_URL`; consuming
+    // apps get this ambient typing via their own `env.d.ts`
+    // (`/// <reference types="vite/client" />`), but this package is
+    // type-checked standalone, outside any app, so it needs the reference
+    // itself.
+    "types": ["vite/client"],
+
+    // Path mapping so `core`'s own source can import itself the same way its
+    // consumers do (e.g. `import { buildPagination } from 'core/utils/pagination'`).
+    "paths": {
+      "core/*": ["./src/*"]
+    }
+  }
+}

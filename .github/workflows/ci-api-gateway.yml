@@ -1,0 +1,46 @@
+name: api-gateway CI
+
+on:
+  pull_request:
+    paths:
+      - 'python/services/api_gateway/**'
+      - 'python/libs/ecom_common/**'
+      - 'python/pyproject.toml'
+      - '.github/workflows/ci-api-gateway.yml'
+      - '.github/workflows/_reusable-python-lint-test.yml'
+      - '.github/workflows/_reusable-docker-build-push.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'python/services/api_gateway/**'
+      - 'python/libs/ecom_common/**'
+      - 'python/pyproject.toml'
+      - '.github/workflows/ci-api-gateway.yml'
+      - '.github/workflows/_reusable-python-lint-test.yml'
+      - '.github/workflows/_reusable-docker-build-push.yml'
+
+concurrency:
+  group: ci-api-gateway-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-test:
+    uses: ./.github/workflows/_reusable-python-lint-test.yml
+    permissions:
+      contents: read
+    with:
+      working-path: services/api_gateway
+      package-name: api-gateway
+      run-integration-tests: false
+
+  docker:
+    needs: [lint-test]
+    uses: ./.github/workflows/_reusable-docker-build-push.yml
+    permissions:
+      contents: read
+      packages: write
+    with:
+      context: .
+      dockerfile-path: python/services/api_gateway/Dockerfile
+      image-name: ghcr.io/${{ github.repository_owner }}/ecom-microservices-api-gateway
+      push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}

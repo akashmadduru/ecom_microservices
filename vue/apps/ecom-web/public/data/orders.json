@@ -1,0 +1,18 @@
+[
+  {
+    "id": "ord-1001",
+    "date": "2026-07-01",
+    "status": "Delivered",
+    "total": 129,
+    "items": 2,
+    "tracking": "TRK-8312"
+  },
+  {
+    "id": "ord-1002",
+    "date": "2026-06-27",
+    "status": "In Transit",
+    "total": 89,
+    "items": 1,
+    "tracking": "TRK-4821"
+  }
+]

@@ -1,0 +1,101 @@
+name: Reusable / Node app lint + typecheck + test + e2e
+
+on:
+  workflow_call:
+    inputs:
+      workspace-root:
+        description: Path to the npm workspace root, relative to repo root (e.g. vue)
+        required: true
+        type: string
+      workspace-name:
+        description: The npm workspace package name to target (e.g. ecom-web, ecom-admin) — not necessarily the directory name
+        required: true
+        type: string
+      run-e2e:
+        description: Whether to run the e2e job (apps with no e2e coverage yet can opt out)
+        required: false
+        type: boolean
+        default: true
+
+jobs:
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: ${{ inputs.workspace-root }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: ${{ inputs.workspace-root }}/package-lock.json
+      - run: npm ci
+      # Deliberately NOT `npm run lint`/`npm run format` — those scripts run
+      # with --fix/--write and would silently autofix violations in the
+      # ephemeral runner and exit 0, masking real failures from ever
+      # blocking a PR. Check-only invocations here instead.
+      - name: oxlint (check only)
+        run: npm exec --workspace=${{ inputs.workspace-name }} -- oxlint .
+      - name: eslint (check only)
+        run: npm exec --workspace=${{ inputs.workspace-name }} -- eslint .
+      - name: prettier (check only)
+        run: npm exec --workspace=${{ inputs.workspace-name }} -- prettier --check src/
+
+  typecheck:
+    name: typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: ${{ inputs.workspace-root }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: ${{ inputs.workspace-root }}/package-lock.json
+      - run: npm ci
+      - run: npm run type-check --workspace=${{ inputs.workspace-name }}
+
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: ${{ inputs.workspace-root }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: ${{ inputs.workspace-root }}/package-lock.json
+      - run: npm ci
+      - run: npm exec --workspace=${{ inputs.workspace-name }} -- vitest run
+
+  e2e:
+    name: e2e
+    if: inputs.run-e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: ${{ inputs.workspace-root }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: ${{ inputs.workspace-root }}/package-lock.json
+      - run: npm ci
+      # Chromium only in PR-blocking CI, for speed — the full
+      # chromium/firefox/webkit matrix in playwright.config.ts is not run
+      # here; there isn't enough e2e coverage yet to justify the cost.
+      - run: npm exec --workspace=${{ inputs.workspace-name }} -- playwright install --with-deps chromium
+      - run: npm exec --workspace=${{ inputs.workspace-name }} -- playwright test --project=chromium

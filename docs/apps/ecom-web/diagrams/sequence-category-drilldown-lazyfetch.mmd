@@ -1,0 +1,29 @@
+%% Category drill-down lazy-fetch flow (CategoryTreeFilter.vue)
+%% Renders with: npx @mermaid-js/mermaid-cli -i sequence-category-drilldown-lazyfetch.mmd -o sequence-category-drilldown-lazyfetch.svg
+sequenceDiagram
+    autonumber
+    actor User
+    participant Tree as CategoryTreeFilter.vue
+    participant Store as categoryStore (Pinia)
+    participant Api as CategoriesApi
+    participant BE as Backend (GET /products/categories)
+
+    User->>Tree: Click expand caret on category node (parentId)
+    Tree->>Store: fetchChildren(parentId)
+
+    alt cache hit - childrenByParentId[parentId] already populated
+        Store-->>Tree: return cached children[] immediately (no network call)
+    else cache miss
+        Store->>Store: loading = true
+        Store->>Api: getCategories(parentId)
+        Api->>BE: GET /products/categories?parent_id=<parentId>
+        BE-->>Api: flat one-level list of children (ordered by sort_order)
+        Api-->>Store: Category[]
+        Store->>Store: childrenByParentId[parentId] = children
+        Store->>Store: loading = false
+        Store-->>Tree: children[]
+    end
+
+    Tree->>Tree: render children nodes under the expanded parent
+
+    Note over User,BE: Selecting a radio at any level (parent or child) triggers\ncontroller.setFilter('category_id', id) -\nsee sequence-products-page-filter-pagination.mmd for that flow in full

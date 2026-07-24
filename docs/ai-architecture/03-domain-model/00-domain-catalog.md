@@ -51,11 +51,11 @@ don't infer more than the cluster file actually documents.
 
 ## Cross-check performed
 
-`libs/ecom_common/src/ecom_common/events.py::EventType` reserves exactly: User, Product,
+`python/libs/ecom_common/src/ecom_common/events.py::EventType` reserves exactly: User, Product,
 Inventory, Cart, Wishlist, Order, Payment, Refund, Notification, Review. Every
 Reserved-in-infra tag above traces to one of those, **except Search**, which is
 Reserved-in-infra solely on the strength of its gateway route
-(`services/api_gateway/src/api_gateway/route_table.py`) — it has no corresponding
+(`python/services/api_gateway/src/api_gateway/route_table.py`) — it has no corresponding
 `EventType`. This is the one place where the maturity tag needed to be derived by
 cross-referencing two independent sources (event catalog and route table) rather than
 one; see `09-discovery-and-intelligence.md` for the full note.
