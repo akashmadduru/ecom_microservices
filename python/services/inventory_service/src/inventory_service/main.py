@@ -95,6 +95,6 @@ app = create_app(
     routers=[router, admin_router, internal_router],
     readiness_checks={"database": _check_db, "redis": _check_redis},
     lifespan=lifespan,
-    cors_origins=settings.cors_origins.split(","),
+    cors_origins=settings.cors_origins,
     tags_metadata=TAGS_METADATA,
 )

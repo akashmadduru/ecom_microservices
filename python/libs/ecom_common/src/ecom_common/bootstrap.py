@@ -42,7 +42,7 @@ def create_app(
     if cors_origins:
         app.add_middleware(
             CORSMiddleware,
-            allow_origins=list(cors_origins),
+            allow_origins=cors_origins,
             allow_credentials=True,
             allow_methods=["*"],
             allow_headers=["*"],

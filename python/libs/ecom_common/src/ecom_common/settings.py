@@ -33,7 +33,11 @@ class BaseServiceSettings(BaseSettings):
     jwt_issuer: str = "ecom-auth-service"
     jwt_audience: str = "ecom-gateway"
 
-    cors_origins: str = "http://localhost:5173"
+    cors_origins: list = [
+        "http://localhost:5173", 
+        "http://localhost:5174", 
+        "http://localhost:5175"
+    ]
 
     otel_exporter_endpoint: str = ""
     otel_enabled: bool = False

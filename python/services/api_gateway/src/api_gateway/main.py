@@ -62,7 +62,7 @@ app = create_app(
     ),
     readiness_checks={"redis": _check_redis},
     lifespan=lifespan,
-    cors_origins=settings.cors_origins.split(","),
+    cors_origins=settings.cors_origins
 )
 
 
