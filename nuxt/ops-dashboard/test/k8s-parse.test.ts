@@ -1,10 +1,13 @@
 import type { V1Pod } from '@kubernetes/client-node'
 import { describe, expect, it } from 'vitest'
 import {
+  computeImageId,
   decodePodId,
+  decodeVolumeId,
   deploymentNameFromReplicaSet,
   derivePodHealth,
   encodePodId,
+  groupPodImages,
   k8sTimestampToIso,
   podIps,
   resolvePodService,
@@ -44,6 +47,84 @@ describe('encodePodId / decodePodId round-trip', () => {
       expect.objectContaining({ statusCode: 400, message: expect.stringMatching(/Invalid kubernetes pod id/) }),
     )
     expect(() => decodePodId('a_b_c_d')).toThrow(expect.objectContaining({ statusCode: 400 }))
+  })
+})
+
+describe('decodeVolumeId', () => {
+  it('decodes a namespace_name id', () => {
+    expect(decodeVolumeId('ecom_pg-data')).toEqual({ namespace: 'ecom', name: 'pg-data' })
+  })
+
+  it('throws a distinct "ambiguous" 400 (not the generic malformed-id message) on a bare name', () => {
+    expect(() => decodeVolumeId('pg-data')).toThrow(
+      expect.objectContaining({ statusCode: 400, message: expect.stringMatching(/ambiguous volume name/) }),
+    )
+  })
+
+  it('throws the same "ambiguous" 400 for a 3+ part id (a volume id has no container part)', () => {
+    expect(() => decodeVolumeId('a_b_c')).toThrow(expect.objectContaining({ statusCode: 400 }))
+  })
+})
+
+describe('computeImageId', () => {
+  it('extracts a sha256 digest embedded anywhere in imageID, regardless of runtime prefix', () => {
+    const digest = `sha256:${'a'.repeat(64)}`
+    expect(computeImageId(`docker-pullable://repo@${digest}`, 'repo:tag')).toBe(digest)
+    expect(computeImageId(`containerd://${digest}`, 'repo:tag')).toBe(digest)
+  })
+
+  it('falls back to a base64url encoding of the raw image reference when no digest is extractable', () => {
+    expect(computeImageId('', 'busybox:latest')).toBe(Buffer.from('busybox:latest').toString('base64url'))
+    expect(computeImageId(undefined, 'busybox:latest')).toBe(Buffer.from('busybox:latest').toString('base64url'))
+  })
+
+  it('the fallback id only ever contains the base64url charset (route-safe, no "/" or ":")', () => {
+    const id = computeImageId(undefined, 'my-registry.example.com/team/app:v1.2.3')
+    expect(id).toMatch(/^[A-Za-z0-9_-]+$/)
+  })
+})
+
+describe('groupPodImages', () => {
+  function podWithContainers(
+    name: string,
+    namespace: string,
+    containers: { name: string, image: string, imageID: string }[],
+  ): V1Pod {
+    return {
+      metadata: { name, namespace },
+      status: { containerStatuses: containers.map((c) => ({ ...c, ready: true, restartCount: 0, state: {} })) },
+    } as V1Pod
+  }
+
+  it('groups two pods referencing the same digest into one group', () => {
+    const digest = `sha256:${'c'.repeat(64)}`
+    const groups = groupPodImages([
+      podWithContainers('web-1', 'ecom', [{ name: 'web', image: 'ecom/web:1.0', imageID: `containerd://${digest}` }]),
+      podWithContainers('web-2', 'ecom', [{ name: 'web', image: 'ecom/web:1.0', imageID: `containerd://${digest}` }]),
+    ])
+    expect(groups.size).toBe(1)
+    const group = groups.get(digest)!
+    expect([...group.refs]).toEqual(['ecom/web:1.0'])
+    expect(group.referencedBy).toEqual([
+      { containerId: 'ecom_web-1', containerName: 'web-1', service: null },
+      { containerId: 'ecom_web-2', containerName: 'web-2', service: null },
+    ])
+  })
+
+  it('dedupes a single pod with two containers on the same image (no double count)', () => {
+    const digest = `sha256:${'d'.repeat(64)}`
+    const groups = groupPodImages([
+      podWithContainers('multi', 'ecom', [
+        { name: 'a', image: 'shared:1.0', imageID: `containerd://${digest}` },
+        { name: 'b', image: 'shared:1.0', imageID: `containerd://${digest}` },
+      ]),
+    ])
+    expect(groups.size).toBe(1)
+    expect(groups.get(digest)!.referencedBy).toHaveLength(1)
+  })
+
+  it('returns an empty map for no pods', () => {
+    expect(groupPodImages([]).size).toBe(0)
   })
 })
 

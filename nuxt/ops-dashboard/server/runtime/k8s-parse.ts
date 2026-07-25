@@ -1,6 +1,6 @@
 import { createError } from 'h3'
 import type { V1Pod } from '@kubernetes/client-node'
-import type { HealthState } from './types'
+import type { HealthState, ImageReference } from './types'
 
 /**
  * Pure Kubernetes → DTO mapping helpers, kept separate from the provider (which
@@ -71,6 +71,32 @@ export function decodePodId(id: string): DecodedPodId {
     statusCode: 400,
     statusMessage: 'Bad Request',
     message: `Invalid kubernetes pod id "${id}": expected "namespace_podname" or "namespace_podname_container".`,
+  })
+}
+
+/**
+ * Decode a PVC id encoded via `encodePodId(namespace, name)` (see
+ * `VolumeSummary.id`'s doc comment in `types.ts` for why a PVC needs one,
+ * unlike a Docker volume name, which is already globally unique on its own).
+ *
+ * Unlike `decodePodId`, a bare, separator-less name is a real, distinct error
+ * here — NOT just "malformed input" — because with the default "all
+ * namespaces" scope (`K8S_NAMESPACE` unset) a bare PVC name is genuinely
+ * ambiguous: the same name can exist in multiple namespaces, and there is no
+ * way to know which one the caller means. So this throws its own actionable
+ * message rather than reusing `decodePodId`'s generic "expected
+ * namespace_podname" one.
+ */
+export function decodeVolumeId(id: string): { namespace: string; name: string } {
+  const parts = id.split(POD_ID_SEP)
+  if (parts.length === 2) {
+    const [namespace, name] = parts as [string, string]
+    return { namespace, name }
+  }
+  throw createError({
+    statusCode: 400,
+    statusMessage: 'Bad Request',
+    message: 'ambiguous volume name across namespaces — use the fully-qualified id from the list response.',
   })
 }
 
@@ -197,4 +223,84 @@ export function k8sTimestampToIso(value: Date | string | undefined | null): stri
   const parsed = value instanceof Date ? value.getTime() : Date.parse(value)
   if (Number.isNaN(parsed)) return null
   return new Date(parsed).toISOString()
+}
+
+/**
+ * A real Docker digest embedded in a containerStatus's `imageID`, e.g.
+ * `docker-pullable://repo@sha256:<hex>` or `containerd://sha256:<hex>` — the
+ * exact prefix varies by container runtime, so this matches the digest
+ * anywhere in the string rather than anchoring to a specific prefix.
+ */
+const IMAGE_DIGEST_PATTERN = /sha256:[a-f0-9]{64}/
+
+/**
+ * One group of pods/containers observed to reference the same image (Phase 4
+ * `listImages`/`inspectImage` — see `KubernetesProvider`'s doc comments for why
+ * this is a documented approximation, not a real per-image API).
+ */
+export interface PodImageGroup {
+  id: string
+  /** Raw image references seen for this group (the closest analog to repoTags). */
+  refs: Set<string>
+  referencedBy: ImageReference[]
+}
+
+/**
+ * Derive the id `listImages`/`inspectImage` use for one observed image
+ * reference: the real digest when `imageID` cleanly contains one (works
+ * identically across container runtimes/prefixes — see
+ * `IMAGE_DIGEST_PATTERN`); otherwise a synthetic, ROUTE-SAFE id derived from
+ * the raw reference string. A raw reference like `repo/name:tag` contains `/`
+ * and `:`, which `assertValidImageId`'s fallback charset (`[A-Za-z0-9_-]`)
+ * does not admit, so it is base64url-encoded rather than used verbatim — this
+ * also means `inspectImage` can recompute the exact same id by re-running this
+ * same derivation over a fresh pod scan, with no separate encode/decode pair
+ * to keep in sync (unlike `encodePodId`/`decodePodId`).
+ */
+export function computeImageId(imageID: string | undefined, image: string | undefined): string {
+  const digest = imageID?.match(IMAGE_DIGEST_PATTERN)?.[0]
+  if (digest) return digest
+  const ref = image ?? imageID ?? ''
+  return Buffer.from(ref).toString('base64url')
+}
+
+/**
+ * Scan every pod's `containerStatuses` and group them by `computeImageId`,
+ * mirroring what `docker.listImages()`/`docker.getImage(id)` would report —
+ * there is no per-image Kubernetes API to call, so both `listImages` and
+ * `inspectImage` re-run this exact same scan (see `KubernetesProvider`).
+ * `referencedBy` names the pod, not the specific container inside it — this
+ * app's abstraction treats a pod as "the container" (see `encodePodId`'s doc
+ * comment), so a multi-container pod referencing two different images can
+ * legitimately appear in two different groups' `referencedBy` under the same
+ * pod-level id. A pod's own containerStatuses are deduplicated by image id so
+ * a pod with two containers on the same image isn't counted/listed twice.
+ */
+export function groupPodImages(pods: V1Pod[]): Map<string, PodImageGroup> {
+  const groups = new Map<string, PodImageGroup>()
+  for (const pod of pods) {
+    const namespace = pod.metadata?.namespace ?? ''
+    const podName = pod.metadata?.name ?? ''
+    const service = resolvePodService(pod)
+    const seenInPod = new Set<string>()
+
+    for (const cs of pod.status?.containerStatuses ?? []) {
+      const id = computeImageId(cs.imageID, cs.image)
+      if (seenInPod.has(id)) continue
+      seenInPod.add(id)
+
+      let group = groups.get(id)
+      if (!group) {
+        group = { id, refs: new Set<string>(), referencedBy: [] }
+        groups.set(id, group)
+      }
+      if (cs.image) group.refs.add(cs.image)
+      group.referencedBy.push({
+        containerId: encodePodId(namespace, podName),
+        containerName: podName,
+        service,
+      })
+    }
+  }
+  return groups
 }

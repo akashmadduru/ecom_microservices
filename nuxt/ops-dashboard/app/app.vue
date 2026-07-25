@@ -6,6 +6,7 @@ onMounted(load)
 
 const navItems = [
   { to: '/containers', label: 'Containers' },
+  { to: '/images', label: 'Images' },
   { to: '/networks', label: 'Networks' },
   { to: '/volumes', label: 'Volumes' },
   { to: '/health', label: 'Health' },

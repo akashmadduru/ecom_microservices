@@ -1,23 +1,23 @@
 <script setup lang="ts">
-import type { VolumeSummary } from '~~/server/runtime/types'
+import type { ImageSummary } from '~~/server/runtime/types'
 
 const api = useApiClient()
 const router = useRouter()
-const { data, pending, error, refresh } = await useAsyncData('volumes', () =>
-  api.listVolumes(),
+const { data, pending, error, refresh } = await useAsyncData('images', () =>
+  api.listImages(),
 )
 
 const columns = [
-  { key: 'name', label: 'Name' },
-  { key: 'driver', label: 'Driver' },
-  { key: 'scope', label: 'Scope' },
-  { key: 'mountpoint', label: 'Mountpoint' },
+  { key: 'repoTags', label: 'Tags' },
+  { key: 'size', label: 'Size' },
   { key: 'createdAt', label: 'Created' },
+  { key: 'dangling', label: 'Dangling' },
+  { key: 'containerCount', label: 'Containers' },
   { key: 'actions', label: 'Actions' },
 ]
 
-function openDetail(row: VolumeSummary): void {
-  router.push(`/volumes/${row.id}`)
+function openDetail(row: ImageSummary): void {
+  router.push(`/images/${encodeURIComponent(row.id)}`)
 }
 
 // Page-level "Prune unused" — gated only on the global switch (prune has no
@@ -26,17 +26,31 @@ const { data: resourceConfig } = useAsyncData('resource-mutations-config', () =>
   api.getResourceMutationsConfig(),
 )
 const { pruning, pruneError, run: pruneUnused } = usePruneAction({
-  confirmMessage: 'Prune all unused volumes? This cannot be undone.',
-  errorFallback: 'Failed to prune volumes.',
-  prune: () => api.pruneVolumes(),
+  confirmMessage: 'Prune all dangling (unused) images? This cannot be undone.',
+  errorFallback: 'Failed to prune images.',
+  prune: () => api.pruneImages(),
   refresh: () => refresh(),
 })
+
+/** Bytes to a human-readable size; null (kubernetes mode) renders as '—'. */
+function formatSize(bytes: number | null): string {
+  if (bytes === null) return '—'
+  if (bytes < 1024) return `${bytes} B`
+  const units = ['KB', 'MB', 'GB', 'TB']
+  let value = bytes / 1024
+  let unit = 0
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024
+    unit += 1
+  }
+  return `${value.toFixed(1)} ${units[unit]}`
+}
 </script>
 
 <template>
   <div>
     <div class="page-head">
-      <h1>Volumes</h1>
+      <h1>Images</h1>
       <div class="page-head__actions">
         <button
           v-if="resourceConfig?.allowed"
@@ -50,18 +64,23 @@ const { pruning, pruneError, run: pruneUnused } = usePruneAction({
       </div>
     </div>
     <p v-if="pruneError" class="error">{{ pruneError }}</p>
-    <p v-if="error" class="error">Failed to load volumes: {{ error.message }}</p>
+    <p v-if="error" class="error">Failed to load images: {{ error.message }}</p>
     <DataTable
       v-else
       :columns="columns"
-      :rows="data?.volumes ?? []"
+      :rows="data?.images ?? []"
       :row-key="(row) => row.id"
-      empty-text="No volumes found."
+      empty-text="No images found."
       @select="openDetail"
     >
+      <template #cell-repoTags="{ row }">
+        <span :class="{ muted: row.dangling }">{{ row.repoTags.join(', ') || '(dangling)' }}</span>
+      </template>
+      <template #cell-size="{ row }">{{ formatSize(row.size) }}</template>
       <template #cell-createdAt="{ row }">{{ row.createdAt ?? '—' }}</template>
+      <template #cell-dangling="{ row }">{{ row.dangling ? 'yes' : 'no' }}</template>
       <template #cell-actions="{ row }">
-        <VolumeActions :id="row.id" :name="row.name" @done="refresh()" />
+        <ImageActions :image-id="row.id" :container-count="row.containerCount" @done="refresh()" />
       </template>
     </DataTable>
   </div>
@@ -92,5 +111,8 @@ const { pruning, pruneError, run: pruneUnused } = usePruneAction({
 }
 .error {
   color: #ff7b72;
+}
+.muted {
+  color: var(--muted);
 }
 </style>

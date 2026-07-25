@@ -1,4 +1,5 @@
 import { PassThrough } from 'node:stream'
+import { createError } from 'h3'
 import type {
   CoreV1Api,
   Log,
@@ -14,19 +15,26 @@ import type {
   ContainerPort,
   ContainerSummary,
   HealthReport,
+  ImageDetail,
+  ImageSummary,
   LogStreamOptions,
+  NetworkDetail,
   NetworkSummary,
   RuntimeProvider,
+  VolumeDetail,
   VolumeSummary,
 } from './types'
 import {
   decodePodId,
+  decodeVolumeId,
   derivePodHealth,
   encodePodId,
+  groupPodImages,
   k8sTimestampToIso,
   podIps,
   resolvePodService,
 } from './k8s-parse'
+import type { PodImageGroup } from './k8s-parse'
 import { aggregateHealth } from './health-aggregate'
 
 /**
@@ -98,11 +106,122 @@ export class KubernetesProvider implements RuntimeProvider {
     return (list.items ?? []).map((svc) => this.mapService(svc))
   }
 
+  /**
+   * `listNetworks()` deliberately leaves `containers: []` — resolving backing
+   * pods per Service would be an N+1 labelSelector query per Service, not
+   * worth it at list scale (see `mapService`'s comment). At SINGLE-resource
+   * scale, that cost doesn't apply, so the detail route pays the one extra
+   * query here — exactly the follow-up flagged in FutureWork.md when this gap
+   * was first identified ("If a /networks/:id detail view is ever added...
+   * this would be the natural place to do the one extra query per-Service
+   * instead of N-per-list").
+   */
+  async inspectNetwork(id: string): Promise<NetworkDetail> {
+    const { namespace, name } = decodePodId(id)
+    const svc = await this.core.readNamespacedService({ name, namespace })
+    const summary = this.mapService(svc)
+    const containers = await this.resolveServiceContainers(svc, namespace)
+    return {
+      ...summary,
+      containers,
+      // No per-pod endpoint record (IP/MAC) the way a Docker network
+      // attachment has one — containerDetails carries names only.
+      containerDetails: containers.map((podName) => ({
+        id: podName,
+        name: podName,
+        ipv4Address: null,
+        ipv6Address: null,
+        macAddress: null,
+      })),
+      options: {},
+      // Phase 5: Service's own labels — closest analog to a Docker network's
+      // `Labels`. Kubernetes mutations are rejected upstream (mutations are
+      // Docker-only), so nothing in this codebase reads this in kubernetes
+      // mode today, but the field is populated for shape parity with the
+      // Docker branch rather than left as a silent {} that would look wrong.
+      labels: svc.metadata?.labels ?? {},
+    }
+  }
+
   async listVolumes(): Promise<VolumeSummary[]> {
     const list = this.allNamespaces
       ? await this.core.listPersistentVolumeClaimForAllNamespaces()
       : await this.core.listNamespacedPersistentVolumeClaim({ namespace: this.namespace })
     return (list.items ?? []).map((pvc) => this.mapPvc(pvc))
+  }
+
+  /**
+   * `readNamespacedPersistentVolumeClaim` via the decoded `namespace_name` id
+   * (see `VolumeSummary.id`'s doc comment in types.ts for why a PVC needs a
+   * namespace-qualified id at all). `decodeVolumeId` throws its own actionable
+   * 400 for a bare, separator-less name — genuinely ambiguous in "all
+   * namespaces" mode, not just malformed input.
+   */
+  async inspectVolume(id: string): Promise<VolumeDetail> {
+    const { namespace, name } = decodeVolumeId(id)
+    const pvc = await this.core.readNamespacedPersistentVolumeClaim({ name, namespace })
+    const summary = this.mapPvc(pvc)
+    // No Kubernetes analog to Docker's driver Options / opaque Status blob.
+    return { ...summary, options: {}, status: null }
+  }
+
+  /**
+   * Shared pod scan behind both `listImages()` and `inspectImage()` — there is
+   * no per-image Kubernetes API to call, so both methods need the exact same
+   * "list every pod in scope, group by reported image" work; factored here so
+   * it exists in exactly one place rather than two copies that could drift.
+   * See `groupPodImages`'s doc comment in k8s-parse.ts for the grouping/id
+   * derivation rules.
+   */
+  private async scanImageGroups(): Promise<Map<string, PodImageGroup>> {
+    const list = this.allNamespaces
+      ? await this.core.listPodForAllNamespaces()
+      : await this.core.listNamespacedPod({ namespace: this.namespace })
+    return groupPodImages(list.items ?? [])
+  }
+
+  /**
+   * Documented approximation (Phase 4): `size`/`createdAt` stay null and
+   * `dangling` stays false — neither has a Kubernetes equivalent.
+   */
+  async listImages(): Promise<ImageSummary[]> {
+    const groups = await this.scanImageGroups()
+    return [...groups.values()].map((g) => ({
+      id: g.id,
+      repoTags: [...g.refs],
+      size: null,
+      createdAt: null,
+      dangling: false,
+      containerCount: g.referencedBy.length,
+    }))
+  }
+
+  /**
+   * `labels: {}`, `layers: null`, `history: null` are all structural gaps, not
+   * oversights: Kubernetes exposes no per-image label map, no filesystem layer
+   * digests, and no `docker history` equivalent for a bare image reference —
+   * none of that data exists anywhere in the Kubernetes API surface to fetch.
+   * `referencedBy` IS real, computed from which pods/containers matched
+   * during the scan.
+   */
+  async inspectImage(id: string): Promise<ImageDetail> {
+    const groups = await this.scanImageGroups()
+    const group = groups.get(id)
+    if (!group) {
+      throw createError({ statusCode: 404, statusMessage: 'Not Found', message: `No such image: ${id}` })
+    }
+    return {
+      id: group.id,
+      repoTags: [...group.refs],
+      size: null,
+      createdAt: null,
+      dangling: false,
+      containerCount: group.referencedBy.length,
+      labels: {},
+      layers: null,
+      history: null,
+      referencedBy: group.referencedBy,
+    }
   }
 
   async getHealth(): Promise<HealthReport> {
@@ -252,12 +371,16 @@ export class KubernetesProvider implements RuntimeProvider {
     const clusterIps = (svc.spec?.clusterIPs ?? [svc.spec?.clusterIP])
       .filter((ip): ip is string => Boolean(ip) && ip !== 'None')
     return {
-      // `svc.metadata.uid` is always present in practice; `encodePodId` here is
-      // just a stable, never-empty fallback string, reused for convenience —
-      // this is a Service id, NOT a pod id, and it is never fed through
-      // `decodePodId` anywhere (there is no `networks/[id]` route). Don't read
-      // this as implying a pod round-trip.
-      id: svc.metadata?.uid ?? encodePodId(namespace, name),
+      // Phase 4 correction: this USED to be `svc.metadata?.uid ?? encodePodId(...)`,
+      // with a comment noting it was "never fed through decodePodId anywhere
+      // (there is no networks/[id] route)". Now that a `/networks/:id` route
+      // exists, a bare UID is actually unusable for a lookup — the Kubernetes
+      // API has no "get Service by UID" call (field selectors don't index
+      // `metadata.uid`), only get-by-namespace+name. So the id is now always
+      // the namespace-qualified, decodable `namespace_name` form (same scheme
+      // `encodePodId` uses for pods), which `inspectNetwork` decodes back via
+      // `decodePodId` to make the real `readNamespacedService` call.
+      id: encodePodId(namespace, name),
       name,
       driver: type,
       scope: namespace,
@@ -267,21 +390,45 @@ export class KubernetesProvider implements RuntimeProvider {
       // No Kubernetes analog to Docker's attachable networks.
       attachable: false,
       ipamSubnets: clusterIps,
-      // Deliberately empty: resolving backing pods would need a labelSelector
-      // query per Service (N+1) — not worth it for a list endpoint.
+      // Deliberately empty here: resolving backing pods would need a
+      // labelSelector query per Service (N+1) — not worth it for a list
+      // endpoint. `inspectNetwork` (single-resource scale) pays that one
+      // extra query instead — see its own doc comment.
       containers: [],
       createdAt: k8sTimestampToIso(svc.metadata?.creationTimestamp),
     }
   }
 
+  /**
+   * Resolve a Service's backing pod names via its `spec.selector` — the one
+   * extra labelSelector query `listNetworks()` deliberately skips at list
+   * scale (see `mapService`'s comment), done here because at single-resource
+   * detail scale the N+1 cost that argument rests on doesn't apply. A Service
+   * with no selector (e.g. an `ExternalName` Service) resolves no pods.
+   */
+  private async resolveServiceContainers(svc: V1Service, namespace: string): Promise<string[]> {
+    const selector = svc.spec?.selector
+    if (!selector || Object.keys(selector).length === 0) return []
+    const labelSelector = Object.entries(selector)
+      .map(([key, value]) => `${key}=${value}`)
+      .join(',')
+    const pods = await this.core.listNamespacedPod({ namespace, labelSelector })
+    return (pods.items ?? []).map((p) => p.metadata?.name ?? '').filter(Boolean)
+  }
+
   private mapPvc(pvc: V1PersistentVolumeClaim): VolumeSummary {
+    const namespace = pvc.metadata?.namespace ?? ''
+    const name = pvc.metadata?.name ?? ''
     return {
-      name: pvc.metadata?.name ?? '',
+      // A PVC name is only unique WITHIN its namespace (see VolumeSummary.id's
+      // doc comment in types.ts), so — like pod ids — this is namespace-qualified.
+      id: encodePodId(namespace, name),
+      name,
       driver: pvc.spec?.storageClassName ?? 'unknown',
       // No host mountpoint notion for a PVC; surface the bound PersistentVolume
       // name (empty while unbound) as the closest backing identifier.
       mountpoint: pvc.spec?.volumeName ?? '',
-      scope: pvc.metadata?.namespace ?? '',
+      scope: namespace,
       createdAt: k8sTimestampToIso(pvc.metadata?.creationTimestamp),
       labels: pvc.metadata?.labels ?? {},
     }

@@ -28,6 +28,10 @@ services:
       CONTAINERS: 1   # GET /containers, /containers/{id}/json (inspect), /containers/{id}/logs
       NETWORKS: 1     # GET /networks
       VOLUMES: 1      # GET /volumes
+      IMAGES: 1       # GET /images, /images/{id}/json, /images/{id}/history (Phase 4: read-only
+                      # image listing/inspect). POST stays 0 below, so /images/create (pull) and
+                      # /images/{name}/push remain unreachable through this proxy regardless —
+                      # enabling IMAGES only ever opens the GET-shaped inspect/list/history paths.
       PING: 1         # GET /_ping (readiness probe)
       # INFO deliberately NOT enabled: nothing in this dashboard calls GET
       # /info (health/readiness uses PING). Least privilege — only grant a
@@ -105,6 +109,71 @@ services:
       - ops_network
     # Not published to the host: only the dashboard (same network) talks to it.
 
+  # ---------------------------------------------------------------------------
+  # Phase 5 image/volume/network mutating controls (named remove + prune).
+  # OFF BY DEFAULT. A THIRD, separate proxy instance — never shared with
+  # docker-socket-proxy-mutate above, and never the read-only one either.
+  #
+  # THE CRITICAL DIFFERENCE FROM THE CONTAINER-MUTATE PROXY ABOVE: containers
+  # have independent, path-specific ALLOW_START/ALLOW_STOP/ALLOW_RESTARTS
+  # rules that work WITHOUT needing CONTAINERS=1 at all — that's what makes
+  # the proxy above genuinely narrow. Images/volumes/networks have NO
+  # equivalent per-verb carve-out in this proxy image's haproxy.cfg (verified
+  # against the same pinned v0.4.2 image's real config, not assumed): the
+  # ONLY way to admit `DELETE /images/{id}`, `POST /images/prune`,
+  # `DELETE /volumes/{name}`, `POST /volumes/prune`, `DELETE /networks/{id}`,
+  # or `POST /networks/prune` through this proxy is enabling the resource's
+  # own section (IMAGES / VOLUMES / NETWORKS) together with POST — and each
+  # of those sections ALSO covers other verbs under the same path prefix:
+  #   - IMAGES=1 + POST=1 also admits `POST /images/create` (pull) and
+  #     `POST /images/{name}/push`.
+  #   - VOLUMES=1 + POST=1 also admits `POST /volumes/create`.
+  #   - NETWORKS=1 + POST=1 also admits `POST /networks/create`,
+  #     `POST /networks/{id}/connect`, and `POST /networks/{id}/disconnect`.
+  #
+  # RESIDUAL RISK, stated plainly (this is Option A from an explicit
+  # Approval Gate — see docs/apps/ops-dashboard/DecisionLog.md — not an
+  # oversight): this proxy, once enabled, is technically capable of pull/
+  # create/push/connect at the PROXY layer, exactly like the container-mutate
+  # proxy above is technically capable of `kill` even though this app never
+  # calls it. The narrowing for THIS proxy is enforced at the APP layer
+  # instead: `docker-resource-mutating-provider.ts`'s dockerode calls NEVER
+  # issue create/pull/push/connect — only `getImage(id).remove()`,
+  # `pruneImages({filters:{dangling:['true']}})` (filter hardcoded, never
+  # caller-supplied), `getVolume(name).remove()`, `pruneVolumes()`,
+  # `getNetwork(id).remove()`, `pruneNetworks()`. A compromised dashboard
+  # PROCESS (not just a request without a token) that can reach this proxy
+  # directly could still pull/create/push/connect against it — the same class
+  # of residual risk the container-mutate proxy above already accepts for
+  # `kill`, extended here to three more resource types because Docker's own
+  # proxy has no finer-grained toggle to give us. Kept on a THIRD, separate
+  # proxy/network path specifically so a compromised path to this proxy does
+  # not also grant the container-mutate proxy's blast radius, or vice versa.
+  # ---------------------------------------------------------------------------
+  docker-socket-proxy-mutate-resources:
+    # See the read-only proxy's image-pinning comment above — same reasoning;
+    # this proxy's entire least-privilege argument (such as it is, see above)
+    # also depends on this exact image's ACL behavior.
+    image: tecnativa/docker-socket-proxy:v0.4.2
+    container_name: ops-docker-socket-proxy-mutate-resources
+    restart: unless-stopped
+    environment:
+      CONTAINERS: 0   # explicit: NOT this proxy's concern
+      IMAGES: ${OPS_PROXY_RESOURCE_IMAGES:-0}
+      VOLUMES: ${OPS_PROXY_RESOURCE_VOLUMES:-0}
+      NETWORKS: ${OPS_PROXY_RESOURCE_NETWORKS:-0}
+      POST: ${OPS_PROXY_RESOURCE_POST:-0}
+      # Everything else defaults to the safe/disabled state; enabling resource
+      # mutations end to end requires ALL of: the four vars above set to 1,
+      # AND OPS_ALLOW_RESOURCE_MUTATIONS=true on the dashboard service below,
+      # AND (for volumes/networks) a non-empty OPS_MANAGED_VOLUMES/
+      # OPS_MANAGED_NETWORKS. See README for the full rationale.
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - ops_network
+    # Not published to the host: only the dashboard (same network) talks to it.
+
   ops-dashboard:
     build:
       context: .
@@ -114,6 +183,7 @@ services:
     depends_on:
       - docker-socket-proxy
       - docker-socket-proxy-mutate
+      - docker-socket-proxy-mutate-resources
     environment:
       # REQUIRED — no default; the API fails closed (503) if this is unset.
       OPS_API_TOKEN: ${OPS_API_TOKEN:?set OPS_API_TOKEN in the environment or a .env file}
@@ -137,6 +207,24 @@ services:
       # layers must agree before anything actually happens.
       OPS_ALLOW_MUTATIONS: ${OPS_ALLOW_MUTATIONS:-false}
       OPS_MANAGED_SERVICES: ${OPS_MANAGED_SERVICES:-}
+      # Phase 5 image/volume/network mutation gate — a THIRD, separate
+      # client/proxy for these, never reusing DOCKER_HOST/PORT or
+      # MUTATE_DOCKER_HOST/PORT above. See docker-socket-proxy-mutate-resources'
+      # comment and server/runtime/config.ts's resourceMutateDockerHost doc
+      # comment.
+      RESOURCE_MUTATE_DOCKER_HOST: docker-socket-proxy-mutate-resources
+      RESOURCE_MUTATE_DOCKER_PORT: "2375"
+      # GLOBAL kill switch, independent of OPS_ALLOW_MUTATIONS above — an
+      # operator may want container lifecycle mutations without ever allowing
+      # image/volume/network deletion, or vice versa.
+      OPS_ALLOW_RESOURCE_MUTATIONS: ${OPS_ALLOW_RESOURCE_MUTATIONS:-false}
+      # Comma-separated com.docker.compose.volume / com.docker.compose.network
+      # label values allowed to be a named-remove target. Empty (the default)
+      # => nothing removable even when the switch above is on. Images have no
+      # equivalent list — eligibility there is state-based (zero live
+      # container references), not a configured allowlist.
+      OPS_MANAGED_VOLUMES: ${OPS_MANAGED_VOLUMES:-}
+      OPS_MANAGED_NETWORKS: ${OPS_MANAGED_NETWORKS:-}
     ports:
       # Loopback-only publish. Reachable at http://127.0.0.1:9010 on the host,
       # nowhere else. 3000 is Nitro's in-container listen port.

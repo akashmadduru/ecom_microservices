@@ -209,3 +209,183 @@ describe('DockerProvider.inspectContainer — compose-label fallback (edge case)
     expect(detail.project).toBe('ecom')
   })
 })
+
+describe('DockerProvider.listVolumes — id field (real fix, not cosmetic)', () => {
+  it('sets VolumeSummary.id to the volume name, since Docker volume names ARE the identity', async () => {
+    const provider = new DockerProvider({
+      listVolumes: async () => ({
+        Volumes: [{ Name: 'pg-data', Driver: 'local', Mountpoint: '/var/lib/docker/volumes/pg-data', Scope: 'local', Labels: {} }],
+      }),
+    } as unknown as Docker)
+    const [vol] = await provider.listVolumes()
+    expect(vol).toMatchObject({ id: 'pg-data', name: 'pg-data' })
+  })
+})
+
+describe('DockerProvider.inspectVolume', () => {
+  it('maps a real volume inspect, including driver Options and the opaque Status blob', async () => {
+    const provider = new DockerProvider({
+      getVolume: () => ({
+        inspect: async () => ({
+          Name: 'pg-data',
+          Driver: 'local',
+          Mountpoint: '/var/lib/docker/volumes/pg-data/_data',
+          Scope: 'local',
+          Labels: { app: 'postgres' },
+          Options: { type: 'nfs' },
+          Status: { hello: 'world' },
+        }),
+      }),
+    } as unknown as Docker)
+
+    const detail = await provider.inspectVolume('pg-data')
+    expect(detail).toMatchObject({
+      id: 'pg-data',
+      name: 'pg-data',
+      options: { type: 'nfs' },
+      status: { hello: 'world' },
+    })
+  })
+
+  it('defaults Options/Status to {}/null when the driver does not populate them', async () => {
+    const provider = new DockerProvider({
+      getVolume: () => ({
+        inspect: async () => ({ Name: 'anon', Driver: 'local', Mountpoint: '/x', Scope: 'local', Labels: {}, Options: null }),
+      }),
+    } as unknown as Docker)
+    const detail = await provider.inspectVolume('anon')
+    expect(detail.options).toEqual({})
+    expect(detail.status).toBeNull()
+  })
+})
+
+describe('DockerProvider.inspectNetwork', () => {
+  it('maps a real network inspect, including per-container endpoint detail and Options', async () => {
+    const provider = new DockerProvider({
+      getNetwork: () => ({
+        inspect: async () => ({
+          Id: 'net1',
+          Name: 'ecom_network',
+          Driver: 'bridge',
+          Scope: 'local',
+          Internal: false,
+          Attachable: true,
+          Created: '2024-01-01T00:00:00Z',
+          IPAM: { Config: [{ Subnet: '172.20.0.0/16' }] },
+          Options: { 'com.docker.network.bridge.name': 'br-ecom' },
+          Containers: {
+            abc123: { Name: 'api-gateway', EndpointID: 'ep1', MacAddress: '02:42:ac:14:00:02', IPv4Address: '172.20.0.2/16', IPv6Address: '' },
+          },
+        }),
+      }),
+    } as unknown as Docker)
+
+    const detail = await provider.inspectNetwork('net1')
+    expect(detail).toMatchObject({
+      id: 'net1',
+      name: 'ecom_network',
+      driver: 'bridge',
+      ipamSubnets: ['172.20.0.0/16'],
+      containers: ['api-gateway'],
+      options: { 'com.docker.network.bridge.name': 'br-ecom' },
+    })
+    expect(detail.containerDetails).toEqual([
+      { id: 'abc123', name: 'api-gateway', ipv4Address: '172.20.0.2/16', ipv6Address: null, macAddress: '02:42:ac:14:00:02' },
+    ])
+  })
+})
+
+describe('DockerProvider.listImages', () => {
+  function fakeImagesDocker(images: unknown[], containers: unknown[] = []): Docker {
+    return {
+      listImages: async () => images,
+      listContainers: async () => containers,
+    } as unknown as Docker
+  }
+
+  it('maps images and cross-references containerCount via ImageID (happy path)', async () => {
+    const provider = new DockerProvider(
+      fakeImagesDocker(
+        [{ Id: 'sha256:img1', RepoTags: ['ecom/api-gateway:latest'], Size: 12345, Created: 1_700_000_000 }],
+        [{ Id: 'c1', ImageID: 'sha256:img1' }, { Id: 'c2', ImageID: 'sha256:img1' }],
+      ),
+    )
+    const [img] = await provider.listImages()
+    expect(img).toMatchObject({
+      id: 'sha256:img1',
+      repoTags: ['ecom/api-gateway:latest'],
+      size: 12345,
+      dangling: false,
+      containerCount: 2,
+    })
+  })
+
+  it('treats an empty RepoTags list as dangling, and filters the "<none>:<none>" sentinel (edge case)', async () => {
+    const provider = new DockerProvider(
+      fakeImagesDocker([
+        { Id: 'sha256:dangling1', RepoTags: [], Size: 1, Created: 1 },
+        { Id: 'sha256:dangling2', RepoTags: ['<none>:<none>'], Size: 1, Created: 1 },
+      ]),
+    )
+    const images = await provider.listImages()
+    expect(images.every((i) => i.dangling)).toBe(true)
+    expect(images.every((i) => i.repoTags.length === 0)).toBe(true)
+  })
+
+  it('reports containerCount 0 for an image no container references', async () => {
+    const provider = new DockerProvider(fakeImagesDocker([{ Id: 'sha256:unused', RepoTags: ['x:1'], Size: 1, Created: 1 }]))
+    const [img] = await provider.listImages()
+    expect(img.containerCount).toBe(0)
+  })
+})
+
+describe('DockerProvider.inspectImage', () => {
+  it('maps labels, layers, history, and referencedBy from a real image inspect', async () => {
+    const provider = new DockerProvider({
+      getImage: () => ({
+        inspect: async () => ({
+          Id: 'sha256:img1',
+          RepoTags: ['ecom/api-gateway:latest'],
+          Size: 999,
+          Created: '2024-01-01T00:00:00Z',
+          Config: { Labels: { maintainer: 'ecom' } },
+          RootFS: { Type: 'layers', Layers: ['sha256:layer1', 'sha256:layer2'] },
+        }),
+        history: async () => [
+          { Id: 'sha256:layer1', Created: 1_700_000_000, CreatedBy: '/bin/sh -c #(nop) ADD file', Size: 500 },
+          { Id: '<missing>', Created: 1_700_000_100, CreatedBy: '/bin/sh -c apt-get update', Size: 499 },
+        ],
+      }),
+      listContainers: async () => [
+        { Id: 'c1', Names: ['/api-gateway'], ImageID: 'sha256:img1', Labels: { 'com.docker.compose.service': 'api-gateway' } },
+        { Id: 'c2', Names: ['/other'], ImageID: 'sha256:different' },
+      ],
+    } as unknown as Docker)
+
+    const detail = await provider.inspectImage('sha256:img1')
+
+    expect(detail.labels).toEqual({ maintainer: 'ecom' })
+    expect(detail.layers).toEqual(['sha256:layer1', 'sha256:layer2'])
+    expect(detail.history).toEqual([
+      { id: 'sha256:layer1', createdAt: new Date(1_700_000_000 * 1000).toISOString(), createdBy: '/bin/sh -c #(nop) ADD file', size: 500 },
+      { id: null, createdAt: new Date(1_700_000_100 * 1000).toISOString(), createdBy: '/bin/sh -c apt-get update', size: 499 },
+    ])
+    expect(detail.referencedBy).toEqual([
+      { containerId: 'c1', containerName: 'api-gateway', service: 'api-gateway' },
+    ])
+    expect(detail.containerCount).toBe(1)
+  })
+
+  it('defaults layers to null when RootFS has none (edge case)', async () => {
+    const provider = new DockerProvider({
+      getImage: () => ({
+        inspect: async () => ({ Id: 'sha256:x', RepoTags: [], Size: 1, Created: '2024-01-01T00:00:00Z', Config: {}, RootFS: {} }),
+        history: async () => [],
+      }),
+      listContainers: async () => [],
+    } as unknown as Docker)
+    const detail = await provider.inspectImage('sha256:x')
+    expect(detail.layers).toBeNull()
+    expect(detail.dangling).toBe(true)
+  })
+})

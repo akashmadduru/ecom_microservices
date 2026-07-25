@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { assertValidContainerId, translateDockerNotFound } from '../server/runtime/container-request'
+import {
+  assertValidContainerId,
+  assertValidImageId,
+  assertValidResourceId,
+  translateDockerNotFound,
+} from '../server/runtime/container-request'
 
 describe('assertValidContainerId', () => {
   it('accepts a 64-char hex container id', () => {
@@ -53,6 +58,52 @@ describe('assertValidContainerId', () => {
   })
 })
 
+describe('assertValidResourceId (networks/volumes)', () => {
+  it('accepts a Docker network/volume name', () => {
+    expect(assertValidResourceId('ecom_network')).toBe('ecom_network')
+  })
+
+  it('accepts a kubernetes-mode namespace_name id', () => {
+    expect(assertValidResourceId('ecom_pg-data')).toBe('ecom_pg-data')
+  })
+
+  it('400s on a path-injection attempt', () => {
+    expect(() => assertValidResourceId('../../etc')).toThrowError(expect.objectContaining({ statusCode: 400 }))
+  })
+
+  it('400s on undefined/empty', () => {
+    expect(() => assertValidResourceId(undefined)).toThrowError(expect.objectContaining({ statusCode: 400 }))
+    expect(() => assertValidResourceId('')).toThrowError(expect.objectContaining({ statusCode: 400 }))
+  })
+})
+
+describe('assertValidImageId', () => {
+  it('accepts a real sha256 digest', () => {
+    const id = `sha256:${'a'.repeat(64)}`
+    expect(assertValidImageId(id)).toBe(id)
+  })
+
+  it('accepts a base64url-shaped synthetic kubernetes-mode id', () => {
+    const id = Buffer.from('busybox:latest').toString('base64url')
+    expect(assertValidImageId(id)).toBe(id)
+  })
+
+  it('400s on a malformed sha256 (wrong hex length)', () => {
+    expect(() => assertValidImageId(`sha256:${'a'.repeat(10)}`)).toThrowError(
+      expect.objectContaining({ statusCode: 400 }),
+    )
+  })
+
+  it('400s on a raw, un-encoded image reference containing "/" or ":" (would inject a path segment)', () => {
+    expect(() => assertValidImageId('repo/name:tag')).toThrowError(expect.objectContaining({ statusCode: 400 }))
+  })
+
+  it('400s on undefined/empty', () => {
+    expect(() => assertValidImageId(undefined)).toThrowError(expect.objectContaining({ statusCode: 400 }))
+    expect(() => assertValidImageId('')).toThrowError(expect.objectContaining({ statusCode: 400 }))
+  })
+})
+
 describe('translateDockerNotFound', () => {
   it('rewrites a 404 dockerode error into a friendlier 404', () => {
     const dockerErr = Object.assign(new Error('no such container'), { statusCode: 404 })
@@ -64,6 +115,13 @@ describe('translateDockerNotFound', () => {
   it('rethrows non-404 errors unchanged', () => {
     const other = Object.assign(new Error('engine unreachable'), { statusCode: 502 })
     expect(() => translateDockerNotFound(other, 'abc')).toThrowError(other)
+  })
+
+  it('labels the 404 message with the given resource kind (image/network/volume), not just "container"', () => {
+    const dockerErr = Object.assign(new Error('no such image'), { statusCode: 404 })
+    expect(() => translateDockerNotFound(dockerErr, 'sha256:abc', 'image')).toThrowError(
+      expect.objectContaining({ statusCode: 404, message: 'No such image: sha256:abc' }),
+    )
   })
 
   it('rethrows errors with no statusCode unchanged', () => {

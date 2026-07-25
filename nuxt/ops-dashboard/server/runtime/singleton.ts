@@ -3,28 +3,46 @@ import { CoreV1Api, KubeConfig, Log, VersionApi } from '@kubernetes/client-node'
 import { getOpsConfig } from './config'
 import { DockerProvider } from './docker-provider'
 import { DockerMutatingProvider } from './docker-mutating-provider'
+import {
+  DockerImageMutatingProvider,
+  DockerNetworkMutatingProvider,
+  DockerVolumeMutatingProvider,
+} from './docker-resource-mutating-provider'
 import { KubernetesProvider } from './kubernetes-provider'
 import type { RuntimeProvider } from './types'
 import type { MutatingRuntimeProvider } from './mutating-types'
+import type {
+  ImageMutatingProvider,
+  NetworkMutatingProvider,
+  VolumeMutatingProvider,
+} from './resource-mutating-types'
 
 /**
- * TWO independent Docker() clients + providers for the whole server process:
- * one for reads (`getDockerClient`/`getRuntimeProvider`, talks to the
- * read-only proxy) and one for mutations (`getMutatingDockerClient`/
- * `getMutatingProvider`, talks to the separate mutate-only proxy). Never share
- * a client across the two — that would undo the two-proxy isolation.
+ * THREE independent Docker() clients + providers for the whole server
+ * process: one for reads (`getDockerClient`/`getRuntimeProvider`, talks to the
+ * read-only proxy), one for container lifecycle mutations
+ * (`getMutatingDockerClient`/`getMutatingProvider`, talks to the container-
+ * mutate proxy), and one for image/volume/network named-remove + prune
+ * (`getResourceMutatingDockerClient`/`get{Image,Volume,Network}MutatingProvider`,
+ * talks to the THIRD, dedicated resource-mutate proxy). Never share a client
+ * across any of the three — that would undo the proxy isolation each one
+ * exists for (see docker-compose.ops.yml's residual-risk comments).
  *
- * Both clients ALWAYS talk TCP to their respective socket proxy (host + port)
- * — never a unix socket path. Touching /var/run/docker.sock directly is
+ * All three clients ALWAYS talk TCP to their respective socket proxy (host +
+ * port) — never a unix socket path. Touching /var/run/docker.sock directly is
  * root-equivalent and is exactly what the proxies exist to prevent, so there
  * is no unix-socket branch here on purpose.
  */
 
 let dockerClient: Docker | null = null
 let mutatingDockerClient: Docker | null = null
+let resourceMutatingDockerClient: Docker | null = null
 let provider: RuntimeProvider | null = null
 let k8sProvider: RuntimeProvider | null = null
 let mutatingProvider: MutatingRuntimeProvider | null = null
+let imageMutatingProvider: ImageMutatingProvider | null = null
+let volumeMutatingProvider: VolumeMutatingProvider | null = null
+let networkMutatingProvider: NetworkMutatingProvider | null = null
 
 export function getDockerClient(): Docker {
   if (!dockerClient) {
@@ -105,4 +123,63 @@ export function getMutatingProvider(): MutatingRuntimeProvider {
     mutatingProvider = new DockerMutatingProvider(getMutatingDockerClient())
   }
   return mutatingProvider
+}
+
+/**
+ * A THIRD, separate dockerode client, pointed at the dedicated
+ * image/volume/network mutate-only docker-socket-proxy (see config.ts's
+ * `resourceMutateDockerHost` doc comment for why this can't safely be the
+ * same client/proxy as EITHER the read-only side or the container-mutate
+ * side). Never share this client with `getDockerClient()` or
+ * `getMutatingDockerClient()`.
+ */
+function getResourceMutatingDockerClient(): Docker {
+  if (!resourceMutatingDockerClient) {
+    const { resourceMutateDockerHost, resourceMutateDockerPort } = getOpsConfig()
+    resourceMutatingDockerClient = new Docker({
+      host: resourceMutateDockerHost,
+      port: resourceMutateDockerPort,
+    })
+  }
+  return resourceMutatingDockerClient
+}
+
+/** Defense in depth: throw in kubernetes mode rather than hand back a
+ *  Docker-shaped provider — mirrors `getMutatingProvider()`'s own guard. */
+function assertDockerModeForResourceMutations(): void {
+  const { runtimeMode } = getOpsConfig()
+  if (runtimeMode === 'kubernetes') {
+    throw new Error('Resource mutating providers are not available in kubernetes mode.')
+  }
+}
+
+/**
+ * Phase 5 image mutating provider, lazily constructed on its OWN client/proxy
+ * — kept separate from `getMutatingProvider` (container lifecycle) so a
+ * compromised path to one mutate proxy never grants the other's blast radius.
+ */
+export function getImageMutatingProvider(): ImageMutatingProvider {
+  assertDockerModeForResourceMutations()
+  if (!imageMutatingProvider) {
+    imageMutatingProvider = new DockerImageMutatingProvider(getResourceMutatingDockerClient())
+  }
+  return imageMutatingProvider
+}
+
+/** Phase 5 volume mutating provider — see `getImageMutatingProvider`'s doc comment. */
+export function getVolumeMutatingProvider(): VolumeMutatingProvider {
+  assertDockerModeForResourceMutations()
+  if (!volumeMutatingProvider) {
+    volumeMutatingProvider = new DockerVolumeMutatingProvider(getResourceMutatingDockerClient())
+  }
+  return volumeMutatingProvider
+}
+
+/** Phase 5 network mutating provider — see `getImageMutatingProvider`'s doc comment. */
+export function getNetworkMutatingProvider(): NetworkMutatingProvider {
+  assertDockerModeForResourceMutations()
+  if (!networkMutatingProvider) {
+    networkMutatingProvider = new DockerNetworkMutatingProvider(getResourceMutatingDockerClient())
+  }
+  return networkMutatingProvider
 }

@@ -1,8 +1,230 @@
 # Decision Log (ops-dashboard)
 
-Append-only, scoped to `vue/ops-dashboard/`. Most recent first. Never edit historical
-entries except to mark them superseded. Audience: engineering. Related:
-[`Feature.md`](./Feature.md), [`Changes.md`](./Changes.md), [`FutureWork.md`](./FutureWork.md).
+Append-only, scoped to `nuxt/ops-dashboard/` (the project's location on this
+branch — earlier entries below predate the rename and still say
+`vue/ops-dashboard/`; left as-is per this doc's own append-only rule). Most
+recent first. Never edit historical entries except to mark them superseded.
+Audience: engineering. Related: [`Feature.md`](./Feature.md),
+[`Changes.md`](./Changes.md), [`FutureWork.md`](./FutureWork.md).
+
+---
+
+## 2026-07-25 — Phase 5 resource mutations: named remove (Option A) accepted with app-layer narrowing, on a THIRD, isolated proxy {#phase-5-resource-mutations-option-a-app-layer-narrowing-third-proxy}
+
+**Context.** Phase 5 build ([`Feature.md`](./Feature.md#phase-5-gated-imagevolumenetwork-mutations),
+[`Changes.md`](./Changes.md#change-set-phase-5-build--gated-imagevolumenetwork-mutations-named-remove--prune--2026-07-25)).
+Phase 4 shipped read-only image/network/volume detail views; the next ask was
+mutating controls for those three resource types — specifically named remove,
+not just prune, per an explicit product requirement (an operator needs to
+delete *one specific* dangling image/unused volume/unused network, not only
+"delete everything unused"). This is a direct sequel to Phase 2's own
+container-mutation scoping exercise (stop/start/restart, rebuild/remove/exec
+ruled out) and to the [Phase 2 dedicated-proxy correction](#second-dedicated-mutate-only-docker-socket-proxy-instead-of-widening-the-read-only-one) —
+both are the precedents this decision generalizes.
+
+Before any implementation, the pinned `tecnativa/docker-socket-proxy:v0.4.2`
+image's real `haproxy.cfg.template` was read directly (not assumed), exactly
+as Phase 2's own proxy config was verified before shipping. The finding:
+containers have independent, path-specific `ALLOW_START`/`ALLOW_STOP`/
+`ALLOW_RESTARTS` rules that work without `CONTAINERS=1` at all — that
+independence is what let Phase 2's mutate proxy be genuinely narrow.
+Images/volumes/networks have **no equivalent per-verb carve-out**: the only
+way to admit `DELETE /images/{id}`, `POST /images/prune`, `DELETE
+/volumes/{name}`, `POST /volumes/prune`, `DELETE /networks/{id}`, or `POST
+/networks/prune` through this proxy is enabling the resource's own section
+(`IMAGES`/`VOLUMES`/`NETWORKS`) together with `POST` — and each of those
+sections *also* admits other verbs under the same path prefix: `IMAGES=1`
+also opens `POST /images/create` (pull) and `/images/{name}/push`;
+`VOLUMES=1` also opens `POST /volumes/create`; `NETWORKS=1` also opens
+`POST /networks/create`, `/networks/{id}/connect`, and
+`/networks/{id}/disconnect`. Unlike Phase 2's container case, no proxy-config
+arrangement closes this gap — it is a structural property of this image's ACL
+rules for these three resource types.
+
+**Decision (Option A, chosen at an explicit Approval Gate).** Build named
+remove, not merely prune, for images/volumes/networks. Accept the proxy-layer
+residual risk above explicitly and in writing (this entry, plus
+`docker-compose.ops.yml`'s own comment block), rather than either declining to
+build named remove or trying to hide/minimize the gap. Narrow the actual
+behavior at the **app layer** instead: `docker-resource-mutating-provider.ts`'s
+dockerode calls are hardcoded to only ever issue `getImage(id).remove()`,
+`pruneImages({filters:{dangling:['true']}})` (filter hardcoded, never
+caller-supplied), `getVolume(name).remove()`, `pruneVolumes()`,
+`getNetwork(id).remove()`, `pruneNetworks()` — never create/pull/push/connect,
+and no route or provider method exists that could reach those verbs even by
+mistake (there is no `createImage`/`pullImage`/`connectNetwork` method
+anywhere in `ImageMutatingProvider`/`VolumeMutatingProvider`/
+`NetworkMutatingProvider`, so there is nothing to accidentally wire up). This
+mirrors the already-accepted precedent that Phase 2's `ALLOW_RESTARTS` also
+technically covers `kill` at the proxy layer even though this app never calls
+it — Option A extends that same accepted-residual-risk shape to three more
+resource types, for the same structural reason (the proxy image has no finer
+tool to offer).
+
+The new mutating surface runs on a **third, separate**
+`docker-socket-proxy-mutate-resources` proxy and a **third, separate**
+dockerode client (`getResourceMutatingDockerClient()` in `singleton.ts`) —
+never shared with either the read-only proxy or the Phase 2 container-mutate
+proxy. This is the same "never share a client/proxy across mutation
+surfaces" discipline Phase 2 established, extended by one more instance
+specifically so a compromised network path to *this* proxy (which, per the
+residual risk above, is a real pull/create/push/connect capability once
+enabled) does not also grant the Phase 2 proxy's container-lifecycle blast
+radius, or vice versa.
+
+**Why Option A over the alternatives.** Four options were weighed at the
+Approval Gate:
+
+- **(A) Named remove + app-layer narrowing on a third, isolated proxy —
+  chosen.** The only option that satisfies the actual product requirement
+  (remove one specific resource, not just "prune everything unused"). The
+  residual risk is real but bounded and precedented (see above), is disclosed
+  rather than hidden, and is isolated on its own proxy so it cannot compound
+  with the existing container-mutate proxy's own accepted residual risk.
+- **(B) Prune-only, no named remove** — rejected: does not satisfy the actual
+  ask. An operator who needs to remove one specific tagged image or one
+  specific named volume (not "all dangling/unused ones") would have no way to
+  do it through this dashboard, defeating the point of adding image/volume/
+  network mutation at all. Would have been the safer-looking choice, but
+  safety achieved by not building the requested feature isn't the tradeoff
+  being asked for here.
+- **(C) Don't build any image/volume/network mutation this phase** — rejected:
+  this was Phase 4's own explicitly-scoped-out item (see
+  [Phase 4's "Explicitly out of scope"](./Changes.md#change-set-phase-4-build--read-only-image-listinginspect--two-pre-existing-detail-view-gaps--2026-07-25)),
+  and Phase 5 exists specifically to revisit it with its own scoping/approval
+  pass, exactly as that phase's own FutureWork entry anticipated. Declining
+  again without a new reason would just be re-deferring indefinitely.
+- **(D) A custom, purpose-built proxy (not `tecnativa/docker-socket-proxy`)
+  that DOES enforce a real verb-level carve-out for images/volumes/networks**
+  — rejected for this phase: this would be a materially larger undertaking
+  (writing and maintaining a bespoke HTTP-filtering proxy, not configuring an
+  existing, battle-tested one) for a benefit — closing a residual risk this
+  app already accepts elsewhere in a structurally identical shape (the
+  `ALLOW_RESTARTS`/`kill` precedent) — that wasn't judged to justify the
+  added build/maintenance surface. Not ruled out permanently; listed in
+  [FutureWork.md](./FutureWork.md#phase-5-build--gated-imagevolumenetwork-mutations-named-remove--prune)
+  as a real future option if the residual risk is ever judged unacceptable.
+
+**Two further, smaller decisions made while implementing Option A:**
+
+*Images get a state-based eligibility check ("zero live container
+references"), not a configured allowlist.* Volumes and networks reuse the
+`OPS_MANAGED_SERVICES`-shaped pattern exactly (`OPS_MANAGED_VOLUMES`/
+`OPS_MANAGED_NETWORKS`, matched against the `com.docker.compose.volume`/
+`com.docker.compose.network` label). Images cannot use this shape: an image
+has no Compose-label identity of its own the way a container does — the same
+image can back zero, one, or many containers simultaneously, so there is no
+single "which compose thing does this belong to" answer to allowlist against.
+`runImageRemoval` instead re-derives `containerCount` from a fresh
+`inspectImage` call and denies removal whenever it's nonzero. This was
+flagged as a deliberate deviation in the guard's own doc comments specifically
+so it isn't mistaken for an inconsistency with the volume/network gates.
+
+*`NetworkDetail` gained a `labels` field it didn't have before.* Phase 4's
+`NetworkDetail` (unlike `VolumeDetail`) never surfaced raw labels — nothing
+in Phase 4 needed them. The Phase 5 network-removal gate needs the
+`com.docker.compose.network` label value, re-derived server-side from a real
+inspect (never trusted from client input, matching every other gate in this
+project). Rather than have `resource-mutation-guard.ts` reach around the
+`RuntimeProvider` abstraction and call dockerode directly for this one field
+(which would violate this project's own router→provider layering and
+reintroduce a Docker-specific call outside `docker-provider.ts`), `labels`
+was added to `NetworkDetail` and populated by both `DockerProvider` (`info.Labels`)
+and `KubernetesProvider` (`svc.metadata.labels`, for shape parity, even though
+kubernetes-mode mutations are rejected upstream and nothing reads this value
+there today). `NetworkSummary`/the list endpoint were deliberately **not**
+widened — only the detail shape needed this, mirroring how `Options`/
+`containerDetails` were themselves Phase 4 additions to the detail shape only.
+
+**Consequences.** A third proxy container and a third dockerode client to run
+and reason about (operational cost, consistent with the pattern Phase 2
+already established). The residual proxy-layer risk — a compromised dashboard
+*process* reaching `docker-socket-proxy-mutate-resources` directly could pull/
+create/push/connect images/volumes/networks, not just remove/prune them — is
+real, disclosed in three places (`docker-compose.ops.yml`, `.env.example`,
+this entry) rather than hidden, and is the accepted cost of Option A per the
+explicit Approval Gate decision. It is bounded by the same operational
+discipline Phase 2's own residual risk already relies on: mutations (now of
+three more resource types) are off by default and meant to be enabled only
+for the window an operator actually needs them.
+
+**Revisit when.** If the residual proxy-layer risk described above is ever
+judged unacceptable for a given deployment, Option D (a custom, verb-scoped
+proxy) becomes the concrete next step — not a proxy-config tweak, since no
+tweak to `tecnativa/docker-socket-proxy`'s existing sections closes this gap
+(verified against its real `haproxy.cfg`, not assumed). Any future ask to add
+image pull/push, or network/volume create/connect, needs its own fresh
+scoping/approval pass, exactly as Phase 2's rebuild-was-ruled-out precedent
+and Phase 4's own "no mutation" scoping both required — Phase 5 does not
+create an implicit path toward those capabilities.
+
+---
+
+## 2026-07-25 — `VolumeSummary.id`/`NetworkSummary.id` are namespace-qualified in Kubernetes mode (Phase 4) {#volumesummaryid-and-networksummaryid-are-namespace-qualified-in-kubernetes-mode-phase-4}
+
+**Context.** Phase 4 build ([`Feature.md`](./Feature.md),
+[`Changes.md`](./Changes.md#change-set-phase-4-build--read-only-image-listinginspect--two-pre-existing-detail-view-gaps--2026-07-25)):
+adding `/networks/:id` and `/volumes/:id` detail routes required a real id to
+look up a specific Service/PersistentVolumeClaim by. Neither existed as a
+concern before this phase, because neither resource had a detail route to
+round-trip an id through.
+
+**Decision.** `VolumeSummary` gained an `id` field (it had none before):
+`id === name` in Docker mode (a Docker volume name already is its identity),
+and `id === namespace_name` in Kubernetes mode (the identical encoding scheme
+`k8s-parse.ts` already uses for pod ids, via the same `encodePodId` helper).
+Separately, `NetworkSummary.id` in Kubernetes mode changed from
+`svc.metadata.uid ?? encodePodId(namespace, name)` to always
+`encodePodId(namespace, name)` — the uid path is gone entirely.
+
+**Why.** A PVC name is only unique **within its namespace** — with this
+project's default "all namespaces" scope (`K8S_NAMESPACE` unset), two
+different namespaces can produce two `VolumeSummary` rows with the identical
+`name`. No code before this phase needed to resolve that collision, because
+nothing looked a volume up by name/id; the new `/volumes/:id` route is the
+first thing that does, and a bare, ambiguous name cannot answer "which
+namespace" on its own (see `decodeVolumeId`'s own distinct 400 message for the
+case where a caller supplies one anyway).
+
+The Service id change is a related but separate discovery. The pre-existing
+code's own comment said the uid-based id was "never fed through `decodePodId`
+anywhere (there is no `networks/[id]` route)" — accurate at the time, and
+explicitly flagged as an assumption that would need revisiting if that ever
+changed. It changed this phase. A bare Kubernetes `uid` cannot actually be used
+to look up a Service: there is no "get resource by uid" call in the Kubernetes
+API, and `metadata.uid` is not a supported field selector for a list-and-filter
+workaround either — only a namespace+name pair is directly gettable. So the id
+had to become the decodable `namespace_name` form for `/networks/:id` to be
+implementable at all; the previous uid-based value was simply incompatible
+with the feature being added, not a style preference to weigh against
+alternatives.
+
+**Alternatives rejected.**
+*Keep `NetworkSummary.id` as the Service uid, and have `inspectNetwork` list
+every Service in scope and filter by `metadata.uid` client-side* — rejected:
+works, but silently reintroduces an N-per-request list call (potentially across
+all namespaces) for what should be a single targeted read, purely to avoid
+changing a field that had no other consumer depending on its exact value in
+the first place (no detail route existed before this phase, so there is no
+compatibility cost to changing it).
+*Give `VolumeSummary` a separate `namespace` field instead of encoding it into
+`id`* — rejected for consistency: pods and now Services and PVCs all use the
+identical `namespace_name` id scheme, so a route handler / frontend page never
+needs to special-case which resource kind's id format it's looking at.
+
+**Consequences.** `NetworkSummary.id`'s value changed for every existing
+Kubernetes-mode deployment's `/api/networks` response (from a uid-shaped
+string to a `namespace_name`-shaped one) — called out explicitly in
+[`Changes.md`](./Changes.md#change-set-phase-4-build--read-only-image-listinginspect--two-pre-existing-detail-view-gaps--2026-07-25)'s
+Breaking Changes section, since it's a real response-shape change even though
+nothing in this app itself depended on the old value. An existing unit test
+asserting the old uid-shaped id was updated to match, with a comment
+explaining why, rather than silently left inconsistent with the new behavior.
+
+**Revisit when.** If a future need arises to look up a Kubernetes resource by a
+truly opaque, non-namespace-derivable id (e.g. surfacing `resourceVersion`-based
+optimistic concurrency), this `namespace_name` scheme would need to grow a
+third component or a different approach — not anticipated today.
 
 ---
 

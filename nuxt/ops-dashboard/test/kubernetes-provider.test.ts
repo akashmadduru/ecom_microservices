@@ -218,7 +218,11 @@ describe('KubernetesProvider.listNetworks (Services)', () => {
     }
     const [net] = await makeProvider({ core: fakeCore({ services: [svc] }) }).listNetworks()
     expect(net).toMatchObject({
-      id: 'svc-1',
+      // Phase 4: namespace_name, NOT the Service's uid — a bare uid can't be
+      // looked up via the Kubernetes API (no "get by uid" call exists), so the
+      // id must be the decodable form /networks/:id's inspectNetwork can
+      // actually round-trip through decodePodId.
+      id: 'ecom_api-gateway',
       name: 'api-gateway',
       driver: 'ClusterIP',
       scope: 'ecom',
@@ -237,6 +241,53 @@ describe('KubernetesProvider.listNetworks (Services)', () => {
   })
 })
 
+describe('KubernetesProvider.inspectNetwork', () => {
+  function fakeCoreWithService(overrides: {
+    svc: unknown
+    pods?: V1Pod[]
+    readService?: (args: { name: string; namespace: string }) => Promise<unknown>
+  }): CoreV1Api {
+    return {
+      ...fakeCore({ pods: overrides.pods ?? [] }),
+      readNamespacedService: vi.fn(overrides.readService ?? (async () => overrides.svc)),
+    } as unknown as CoreV1Api
+  }
+
+  it('resolves backing pods via the Service selector (the one extra query list-scale skips)', async () => {
+    const svc = {
+      metadata: { name: 'api-gateway', namespace: 'ecom', creationTimestamp: new Date('2024-01-01T00:00:00Z') },
+      spec: { type: 'ClusterIP', clusterIP: '172.20.0.1', clusterIPs: ['172.20.0.1'], selector: { app: 'api-gateway' } },
+    }
+    const matchingPod = {
+      metadata: { name: 'api-gateway-abc', namespace: 'ecom' },
+    } as V1Pod
+    let seenSelector: string | undefined
+    const core = {
+      ...fakeCoreWithService({ svc }),
+      listNamespacedPod: vi.fn(async (args: { namespace: string; labelSelector?: string }) => {
+        seenSelector = args.labelSelector
+        return { items: [matchingPod] }
+      }),
+    } as unknown as CoreV1Api
+
+    const detail = await makeProvider({ core }).inspectNetwork('ecom_api-gateway')
+
+    expect(seenSelector).toBe('app=api-gateway')
+    expect(detail.containers).toEqual(['api-gateway-abc'])
+    expect(detail.containerDetails).toEqual([
+      { id: 'api-gateway-abc', name: 'api-gateway-abc', ipv4Address: null, ipv6Address: null, macAddress: null },
+    ])
+    expect(detail.options).toEqual({})
+  })
+
+  it('resolves no containers for a selector-less Service (e.g. ExternalName)', async () => {
+    const svc = { metadata: { name: 'edge', namespace: 'ecom' }, spec: { type: 'ExternalName' } }
+    const core = fakeCoreWithService({ svc })
+    const detail = await makeProvider({ core }).inspectNetwork('ecom_edge')
+    expect(detail.containers).toEqual([])
+  })
+})
+
 describe('KubernetesProvider.listVolumes (PVCs)', () => {
   it('maps a PVC to a VolumeSummary (storage class as driver, bound PV as mountpoint)', async () => {
     const pvc = {
@@ -245,11 +296,111 @@ describe('KubernetesProvider.listVolumes (PVCs)', () => {
     }
     const [vol] = await makeProvider({ core: fakeCore({ pvcs: [pvc] }) }).listVolumes()
     expect(vol).toMatchObject({
+      // Phase 4: namespace-qualified, since a PVC name is only unique WITHIN
+      // its namespace — a bare 'pg-data' would collide across namespaces in
+      // the default all-namespaces scope.
+      id: 'ecom_pg-data',
       name: 'pg-data',
       driver: 'gp3',
       mountpoint: 'pvc-abc-123',
       scope: 'ecom',
       labels: { app: 'postgres' },
+    })
+  })
+})
+
+describe('KubernetesProvider.inspectVolume', () => {
+  it('reads the PVC via the decoded namespace_name id', async () => {
+    const pvc = {
+      metadata: { name: 'pg-data', namespace: 'ecom', creationTimestamp: new Date('2024-01-01T00:00:00Z'), labels: { app: 'postgres' } },
+      spec: { storageClassName: 'gp3', volumeName: 'pvc-abc-123' },
+    }
+    let seenArgs: { name: string; namespace: string } | undefined
+    const core = {
+      ...fakeCore(),
+      readNamespacedPersistentVolumeClaim: vi.fn(async (args: { name: string; namespace: string }) => {
+        seenArgs = args
+        return pvc
+      }),
+    } as unknown as CoreV1Api
+
+    const detail = await makeProvider({ core }).inspectVolume('ecom_pg-data')
+
+    expect(seenArgs).toEqual({ name: 'pg-data', namespace: 'ecom' })
+    expect(detail).toMatchObject({ id: 'ecom_pg-data', name: 'pg-data', driver: 'gp3' })
+    expect(detail.options).toEqual({})
+    expect(detail.status).toBeNull()
+  })
+
+  it('400s on a bare, separator-less name (ambiguous across namespaces)', async () => {
+    await expect(makeProvider().inspectVolume('pg-data')).rejects.toMatchObject({
+      statusCode: 400,
+      message: expect.stringMatching(/ambiguous volume name/),
+    })
+  })
+})
+
+describe('KubernetesProvider.listImages / inspectImage', () => {
+  function podWithImage(name: string, namespace: string, imageID: string, image: string): V1Pod {
+    return {
+      metadata: { name, namespace },
+      spec: { containers: [{ name: 'main', image }] },
+      status: {
+        phase: 'Running',
+        containerStatuses: [{ name: 'main', ready: true, restartCount: 0, image, imageID, state: {} }],
+      },
+    } as V1Pod
+  }
+
+  it('groups pods by the digest extracted from containerStatus.imageID', async () => {
+    const digest = `sha256:${'a'.repeat(64)}`
+    const pods = [
+      podWithImage('web-1', 'ecom', `docker-pullable://ecom/web@${digest}`, 'ecom/web:1.0'),
+      podWithImage('web-2', 'ecom', `docker-pullable://ecom/web@${digest}`, 'ecom/web:1.0'),
+    ]
+    const core = fakeCore({ pods })
+    const images = await makeProvider({ core }).listImages()
+
+    expect(images).toHaveLength(1)
+    expect(images[0]).toMatchObject({
+      id: digest,
+      repoTags: ['ecom/web:1.0'],
+      size: null,
+      createdAt: null,
+      dangling: false,
+      containerCount: 2,
+    })
+  })
+
+  it('falls back to a synthetic base64url id when no digest is extractable', async () => {
+    const pods = [podWithImage('adhoc', 'default', '', 'busybox:latest')]
+    const core = fakeCore({ pods })
+    const images = await makeProvider({ core }).listImages()
+
+    expect(images).toHaveLength(1)
+    expect(images[0].id).toBe(Buffer.from('busybox:latest').toString('base64url'))
+    expect(images[0].id).toMatch(/^[A-Za-z0-9_-]+$/) // route-safe charset, no '/' or ':'
+  })
+
+  it('inspectImage re-scans and returns referencedBy, with labels/layers/history structurally null', async () => {
+    const digest = `sha256:${'b'.repeat(64)}`
+    const pods = [podWithImage('worker-1', 'ecom', `containerd://${digest}`, 'ecom/worker:2.0')]
+    const core = fakeCore({ pods })
+
+    const detail = await makeProvider({ core }).inspectImage(digest)
+
+    expect(detail.labels).toEqual({})
+    expect(detail.layers).toBeNull()
+    expect(detail.history).toBeNull()
+    expect(detail.referencedBy).toEqual([
+      { containerId: 'ecom_worker-1', containerName: 'worker-1', service: null },
+    ])
+  })
+
+  it('404s when no pod references the requested image id', async () => {
+    const core = fakeCore({ pods: [] })
+    await expect(makeProvider({ core }).inspectImage('sha256:missing')).rejects.toMatchObject({
+      statusCode: 404,
     })
   })
 })

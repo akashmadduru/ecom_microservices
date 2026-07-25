@@ -6,6 +6,361 @@ recent first. Related: [`Feature.md`](./Feature.md), [`DecisionLog.md`](./Decisi
 
 ---
 
+## Change set: Phase 5 build — gated image/volume/network mutations (named remove + prune) — 2026-07-25
+
+Built on top of Phase 1 + Phase 2 + Phase 3 + Phase 4
+([`Changes.md`](#change-set-phase-4-build--read-only-image-listinginspect--two-pre-existing-detail-view-gaps--2026-07-25)).
+Related decisions: [`DecisionLog.md`](./DecisionLog.md#phase-5-resource-mutations-option-a-app-layer-narrowing-third-proxy).
+
+### Summary
+
+Adds gated, opt-in **named remove + prune** for images, volumes, and networks —
+the same lifecycle-management posture Phase 2 established for containers
+(stop/start/restart), extended to the three resource types Phase 4 made
+read-only-observable. Per an explicit Approval Gate decision ("Option A"),
+this phase builds **named remove**, not merely prune, and accepts a real,
+disclosed proxy-layer residual risk in exchange (see DecisionLog): unlike
+containers, images/volumes/networks have no per-verb carve-out in
+`tecnativa/docker-socket-proxy`'s ACL rules, so enabling `IMAGES`/`VOLUMES`/
+`NETWORKS` + `POST` on the new proxy also technically admits pull/create/push/
+connect at the proxy layer. This is narrowed back down at the **app layer**:
+`docker-resource-mutating-provider.ts` never issues those verbs, and no
+route/provider method exists that could.
+
+Mutations run through a **third, separate** `docker-socket-proxy-mutate-resources`
+proxy and a **third, separate** dockerode client, never shared with the
+read-only proxy or the Phase 2 container-mutate proxy — the same proxy-per-
+mutation-surface isolation Phase 2 established, extended by one more instance.
+
+Two gate shapes, mirroring Phase 2's `mutation-guard.ts` exactly but in a new,
+untouched-sibling file (`resource-mutation-guard.ts`):
+
+- **Named remove** — global kill switch (`OPS_ALLOW_RESOURCE_MUTATIONS`) +
+  per-target eligibility. Volumes/networks use a Compose-label allowlist
+  (`OPS_MANAGED_VOLUMES`/`OPS_MANAGED_NETWORKS`, matched against
+  `com.docker.compose.volume`/`com.docker.compose.network`), same shape as
+  Phase 2's `OPS_MANAGED_SERVICES`. Images use a **different** eligibility
+  rule — zero live container references, re-derived from a fresh
+  `inspectImage` call — because an image has no Compose-label identity of its
+  own to allowlist against (see DecisionLog for why this is a deliberate
+  deviation, not an inconsistency).
+- **Prune** — global kill switch only. No per-target gate, by design: prune
+  has no target. Docker's own engine-level prune (hardcoded `dangling: true`
+  filter for images; no filter, engine-default "unused only" scoping for
+  volumes/networks) is the real backstop that keeps prune scoped to unused
+  resources.
+
+`mutation-guard.ts`, `mutating-types.ts`, and both pre-existing Docker-mode
+socket-proxy instances are completely untouched by this phase — every new
+interface/provider/guard lives in a new sibling file.
+
+### Files changed
+
+- `nuxt/ops-dashboard/server/runtime/config.ts` — **updated.** New
+  `OpsConfig` fields: `resourceMutationsAllowed` (`OPS_ALLOW_RESOURCE_MUTATIONS`,
+  same fail-closed `=== "true"` strictness as `mutationsAllowed`, deliberately
+  independent of it), `managedVolumes`/`managedNetworks` (`OPS_MANAGED_VOLUMES`/
+  `OPS_MANAGED_NETWORKS`, reusing the existing `parseServiceList` helper),
+  `resourceMutateDockerHost`/`Port` (`RESOURCE_MUTATE_DOCKER_HOST`/`PORT`,
+  default `docker-socket-proxy-mutate-resources`/`2375`).
+- `nuxt/ops-dashboard/server/runtime/resource-mutating-types.ts` — **new.**
+  `ImageMutatingProvider`/`VolumeMutatingProvider`/`NetworkMutatingProvider` —
+  sibling interfaces to `MutatingRuntimeProvider`, deliberately not merged
+  into it (that interface's own docstring promises "no remove" for
+  containers; widening it would break that guarantee for existing callers).
+- `nuxt/ops-dashboard/server/runtime/docker-resource-mutating-provider.ts` —
+  **new.** `DockerImageMutatingProvider`/`DockerVolumeMutatingProvider`/
+  `DockerNetworkMutatingProvider`, each constructed with its own dockerode
+  client. Image prune's `dangling: true` filter is hardcoded, never derived
+  from any caller/route input.
+- `nuxt/ops-dashboard/server/runtime/singleton.ts` — **updated.** A third
+  dockerode client (`getResourceMutatingDockerClient`, lazily constructed,
+  pointed at `resourceMutateDockerHost`/`Port`) and `getImageMutatingProvider`/
+  `getVolumeMutatingProvider`/`getNetworkMutatingProvider`, each throwing in
+  kubernetes mode (defense in depth, matching `getMutatingProvider`'s existing
+  pattern) and each lazily constructed exactly like the two existing
+  client/provider pairs. Never shares the new client with either existing one.
+- `nuxt/ops-dashboard/server/runtime/resource-mutation-guard.ts` — **new.**
+  `runImageRemoval`/`runVolumeRemoval`/`runNetworkRemoval` (two-gate, mirrors
+  `runContainerMutation`) and `runImagePrune`/`runVolumePrune`/`runNetworkPrune`
+  (single-gate — no target, so no per-target eligibility check, by design).
+  Structured JSON audit lines (`{"event":"ops.resource_mutation",...}`),
+  distinct event name from Phase 2's `ops.mutation`, `resourceType`/
+  `resourceId` fields in place of `service`/`containerId`.
+- `nuxt/ops-dashboard/server/runtime/types.ts` — **updated.** `NetworkDetail`
+  gained a `labels` field (Docker: `Labels`; Kubernetes: `metadata.labels`) —
+  needed by the network-removal gate to re-derive the
+  `com.docker.compose.network` label server-side; `NetworkSummary` and the
+  list endpoint are unchanged. See DecisionLog for why this lives on the
+  detail shape only, and why the guard reads it via `RuntimeProvider` rather
+  than a direct dockerode call.
+- `nuxt/ops-dashboard/server/runtime/docker-provider.ts`,
+  `kubernetes-provider.ts` — **updated.** `inspectNetwork` in both now
+  populates the new `labels` field.
+- `nuxt/ops-dashboard/server/routes/api/images/[id]/remove.post.ts`,
+  `images/prune.post.ts`, `volumes/[id]/remove.post.ts`,
+  `volumes/prune.post.ts`, `networks/[id]/remove.post.ts`,
+  `networks/prune.post.ts` — **new.** Thin validate-then-delegate routes,
+  same shape as Phase 2's `containers/[id]/stop.post.ts` etc.
+- `nuxt/ops-dashboard/server/routes/api/resource-mutations-config.get.ts` —
+  **new.** Returns `{allowed, managedVolumes, managedNetworks}` — a
+  **separate** endpoint from Phase 2's `mutations-config.get.ts`, which is
+  untouched (its `{allowed, managedServices}` contract still backs
+  `ContainerActions.vue` exactly as before). No managed-list for images:
+  eligibility there is state-based, not allowlist-based.
+- `nuxt/ops-dashboard/app/composables/useApiClient.ts` — **updated.** Added
+  `getResourceMutationsConfig`/`removeImage`/`pruneImages`/`removeVolume`/
+  `pruneVolumes`/`removeNetwork`/`pruneNetworks`, identical `get<T>()`/
+  `post<T>()` pattern to every existing method; new `ResourceMutationsConfig`/
+  `ResourceMutationResult`/`ImagePruneResult`/`VolumePruneResult`/
+  `NetworkPruneResult` types.
+- `nuxt/ops-dashboard/app/components/ImageActions.vue`,
+  `VolumeActions.vue`, `NetworkActions.vue` — **new.** Gated Remove controls,
+  same "controls absent, not disabled, when ineligible" pattern as
+  `ContainerActions.vue`, with a native `confirm()` guard. `ImageActions`
+  gates on `allowed && containerCount === 0`; `VolumeActions`/`NetworkActions`
+  gate on `allowed && managedVolumes/managedNetworks.includes(name)` — a
+  client-side name-based approximation of the server's label-based gate (see
+  each component's own doc comment for the one edge case where they could
+  diverge, and why the server-side gate is the actual authority either way).
+- `nuxt/ops-dashboard/app/pages/images.vue`, `images/[id].vue`, `volumes.vue`,
+  `volumes/[id].vue`, `networks.vue`, `networks/[id].vue` — **updated.** Wired
+  in the corresponding `*Actions` component (row-level on list pages,
+  standalone on detail pages) plus a page-level "Prune unused" button on the
+  three list pages, gated only on the global switch, with its own `confirm()`
+  guard.
+- `nuxt/ops-dashboard/docker-compose.ops.yml` — **updated.** New
+  `docker-socket-proxy-mutate-resources` service (third proxy, `CONTAINERS: 0`
+  explicit, `IMAGES`/`VOLUMES`/`NETWORKS`/`POST` all default `0`); the
+  residual-risk paragraph from DecisionLog is written out in full in this
+  file's own comment block, matching the existing mutate proxy's comment
+  density. `ops-dashboard` service gained
+  `RESOURCE_MUTATE_DOCKER_HOST`/`PORT`, `OPS_ALLOW_RESOURCE_MUTATIONS`,
+  `OPS_MANAGED_VOLUMES`/`OPS_MANAGED_NETWORKS`, and a `depends_on` entry for
+  the new proxy.
+- `nuxt/ops-dashboard/.env.example` — **updated.** New Phase 5 section
+  documenting all of the above, same density as the existing Phase 2 section,
+  including the residual-risk note.
+- `nuxt/ops-dashboard/test/{docker-resource-mutating-provider,
+  resource-mutation-routes,k8s-resource-mutation-mode}.test.ts` — **new.**
+  Unit coverage for the three Docker mutating providers (including "prune
+  passes no caller-supplied filter" assertions), route-level coverage for all
+  six mutation routes + the new config route (both gates, audit line shapes,
+  404 translation), and kubernetes-mode 501-rejection coverage mirroring
+  `k8s-mutation-mode.test.ts`. Test suite grew from 152 (end of Phase 4) to
+  185, all passing.
+
+### Breaking Changes
+
+None. Every new env var defaults to the safe/disabled state
+(`OPS_ALLOW_RESOURCE_MUTATIONS=false`-equivalent, empty allowlists, all four
+new proxy toggles `0`); an operator who upgrades and sets nothing gets
+byte-identical behavior to before this phase, plus one extra idle proxy
+container in the batteries-included compose path. `NetworkDetail.labels` is a
+purely additive field on an existing response shape — no existing consumer
+reads a field that no longer exists or changed meaning.
+
+### Migration Steps Required
+
+None to adopt the read-only-equivalent default. To enable resource mutations:
+set `OPS_ALLOW_RESOURCE_MUTATIONS=true`, a non-empty `OPS_MANAGED_VOLUMES`/
+`OPS_MANAGED_NETWORKS` (images need no allowlist), and the four
+`OPS_PROXY_RESOURCE_*` proxy toggles to `1` — all seven must be set together,
+mirroring Phase 2's own seven-switch enablement story.
+
+### Rollback Plan
+
+Set `OPS_ALLOW_RESOURCE_MUTATIONS=false` (or unset it) and/or stop the
+`docker-socket-proxy-mutate-resources` container — either alone returns the
+dashboard to its read-only-for-these-three-resource-types posture immediately,
+with no data migration or restart-order dependency.
+
+### Verification performed
+
+`npm run lint` (clean), `npm run type-check` (see note below), `npx vitest run`
+(185/185 passing, up from 152), and `docker compose -f docker-compose.ops.yml
+config -q` (valid). Not run against a live Docker Engine or a real
+`docker-socket-proxy` instance — same caveat every prior Docker-mode phase in
+this project carries; this phase's guard logic is exercised via mocks
+(`resource-mutation-routes.test.ts`), not an integration test against a real
+proxy. **Note on type-check:** `nuxt typecheck` (`vue-tsc`) crashes in this
+environment with `MODULE_NOT_FOUND: vue-router/volar/sfc-route-blocks` — a
+pre-existing environment/dependency-hoisting issue (a top-level `vue-router`
+package isn't hoisted in this checkout's `node_modules`; only a nested copy
+under `node_modules/nuxt/node_modules/vue-router` exists), unrelated to this
+phase's code and reproducible on an unmodified tree. Plain `npx tsc --noEmit`
+against both Nuxt-generated project references (`.nuxt/tsconfig.{app,server}.json`)
+was run as a substitute and reports zero errors.
+
+---
+
+## Change set: Phase 4 build — read-only image listing/inspect + two pre-existing detail-view gaps — 2026-07-25
+
+Built on top of Phase 1 + Phase 2 + Phase 3 ([`Changes.md`](#change-set-phase-3-build--generic-read-only-kubernetes-backend--2026-07-24)).
+Related decisions: [`DecisionLog.md`](./DecisionLog.md#volumesummaryid-and-networksummaryid-are-namespace-qualified-in-kubernetes-mode-phase-4).
+
+Note: the project now lives at `nuxt/ops-dashboard/` (this branch's rename from
+the `vue/ops-dashboard/` path used in the Phase 1–3 entries above); paths below
+reflect the current location.
+
+### Summary
+
+Added read-only Docker **image** listing/inspect — the last of the four core
+Docker Engine resource types (containers, networks, volumes, images) this
+dashboard now covers — plus two detail-view gaps flagged in Phase 3's own
+FutureWork entry: `/networks/:id` and `/volumes/:id`, neither of which existed
+before this phase (both backends only had list views). No mutating capability
+was added for any of the three: no image pull/remove/prune, no network/volume
+create/remove. `MutatingRuntimeProvider`, `mutation-guard.ts`, and both existing
+docker-socket-proxy instances are untouched.
+
+Images are a genuinely asymmetric feature across the two backends. Docker mode
+gets a real `docker.listImages()`/`getImage(id).inspect()`/`.history()` — full
+size, creation time, labels, RootFS layers, and `docker history` output.
+Kubernetes mode has **no per-image API at all**: `listImages`/`inspectImage`
+there are a documented approximation that scans every pod's
+`containerStatuses[]` and groups them by the image they report (digest when
+cleanly extractable from `imageID`, else a synthetic base64url id derived from
+the raw image reference — see `computeImageId` in `k8s-parse.ts`); `size`,
+`createdAt`, `labels`, `layers`, and `history` are all structurally unavailable
+there and stay `null`/`{}` by design, not by oversight.
+
+The two detail-view gaps close differently per backend. Docker's
+`inspectNetwork`/`inspectVolume` are real `docker.getNetwork(id).inspect()`/
+`docker.getVolume(id).inspect()` calls, richer than slicing the list response
+(per-container endpoint IPs/MAC for networks; driver `Options` and the opaque
+`Status` blob for volumes — see `NetworkDetail`/`VolumeDetail` in `types.ts`,
+added this phase since Phase 1–3 only had list-shaped DTOs for these two
+resources). Kubernetes's `inspectNetwork` does the one extra
+labelSelector-scoped pod query per Service that `listNetworks()` deliberately
+skips at list scale — exactly the follow-up Phase 3's FutureWork entry named
+when that list-scale gap was first identified. Kubernetes's `inspectVolume`
+required a real, pre-existing bug fix, not just a new route: `VolumeSummary`
+had no `id` field distinct from `name` before this phase, and a PVC name is
+only unique **within its namespace** — with the default all-namespaces scope
+(`K8S_NAMESPACE` unset), two different namespaces can produce two
+`VolumeSummary` rows with the same `name`, a real collision no code before this
+phase needed to resolve because no `/volumes/:id` route existed to expose it.
+`VolumeSummary.id` is now `name` in Docker mode (identical, since a Docker
+volume name IS its identity) and `namespace_name` in Kubernetes mode (the same
+encoding `k8s-parse.ts` already used for pod ids). `NetworkSummary.id` in
+Kubernetes mode also changed, for a related reason: it used to be
+`svc.metadata.uid` (falling back to `namespace_name` only when a uid was
+absent, which real clusters never leave absent) with a comment noting it was
+"never fed through `decodePodId` anywhere" — true until this phase added a
+route that needs to. A bare Kubernetes UID cannot be looked up via the API (no
+"get by uid" call exists, and `metadata.uid` isn't a supported field
+selector), so the id is now always the decodable `namespace_name` form. See
+[DecisionLog](./DecisionLog.md#volumesummaryid-and-networksummaryid-are-namespace-qualified-in-kubernetes-mode-phase-4)
+for the full reasoning and the existing test updated to match.
+
+### Files changed
+
+- `nuxt/ops-dashboard/server/runtime/types.ts` — **updated.** New `ImageSummary`/
+  `ImageDetail`/`ImageReference`/`ImageHistoryEntry`, `NetworkContainerAttachment`/
+  `NetworkDetail`, `VolumeDetail`; `VolumeSummary` gained an `id` field (see
+  Summary above). `RuntimeProvider` gained `listImages`/`inspectImage`/
+  `inspectNetwork`/`inspectVolume`.
+- `nuxt/ops-dashboard/server/runtime/docker-provider.ts` — **updated.**
+  `listImages`/`inspectImage` (cross-referencing `docker.listContainers({all:true})`
+  by `ImageID` for `containerCount`/`referencedBy`, same pattern for both);
+  `inspectNetwork`/`inspectVolume` via real `getNetwork(id).inspect()`/
+  `getVolume(id).inspect()` calls; `listVolumes` now sets `id: v.Name`.
+- `nuxt/ops-dashboard/server/runtime/kubernetes-provider.ts`,
+  `k8s-parse.ts` — **updated.** New `computeImageId`/`groupPodImages` (pure,
+  testable pod-scan/grouping helpers) and `decodeVolumeId` (namespace_name
+  decode with its own "ambiguous volume name" 400, distinct from
+  `decodePodId`'s generic malformed-id 400) in `k8s-parse.ts`; new
+  `listImages`/`inspectImage`/`inspectNetwork`/`inspectVolume` and a
+  `resolveServiceContainers` helper in `kubernetes-provider.ts`; `mapService`'s
+  `id` and `mapPvc`'s new `id` both now use `encodePodId(namespace, name)` (see
+  Summary above for why the Service id changed).
+- `nuxt/ops-dashboard/server/runtime/container-request.ts` — **updated.**
+  New `IMAGE_ID_PATTERN`/`assertValidImageId` (base64url charset or a real
+  `sha256:` digest) and `assertValidResourceId` (network/volume ids — reuses
+  `CONTAINER_ID_PATTERN`, since Docker network/volume identifiers share the
+  exact same charset, rather than a copy-pasted duplicate pattern).
+  `translateDockerNotFound` gained an optional `resource` label parameter
+  (defaults to `"container"`, so every pre-Phase-4 call site is byte-identical)
+  so the new image/network/volume routes don't 404 with a misleading "No such
+  container" message.
+- `nuxt/ops-dashboard/server/routes/api/images/{index,[id]}.get.ts`,
+  `networks/[id].get.ts`, `volumes/[id].get.ts` — **new.** Same
+  validate-then-delegate-then-translate-404 shape as the existing
+  `containers/[id].get.ts`.
+- `nuxt/ops-dashboard/app/composables/useApiClient.ts` — **updated.** Added
+  `listImages`/`inspectImage`/`getNetwork`/`getVolume`, identical `get<T>()`
+  pattern to the existing methods.
+- `nuxt/ops-dashboard/app/pages/images.vue`, `images/[id].vue`,
+  `networks/[id].vue`, `volumes/[id].vue` — **new.** List/detail pages mirroring
+  `volumes.vue`'s `DataTable` list shape and `containers/[id].vue`'s `dl`-based
+  detail shape respectively.
+- `nuxt/ops-dashboard/app/pages/volumes.vue`, `networks.vue` — **updated.**
+  Added click-through to the new detail routes (`containers/index.vue`'s
+  `openDetail` pattern); `volumes.vue`'s `row-key` and link target changed from
+  `row.name` to `row.id` (neither page linked out to a detail view before this
+  phase — there wasn't one — so this is new navigability, not a fix to an
+  existing broken link).
+- `nuxt/ops-dashboard/app/app.vue` — **updated.** Added an "Images" entry to
+  the top nav; without it the new `/images` page would only be reachable by
+  typing the URL directly.
+- `nuxt/ops-dashboard/docker-compose.ops.yml` — **updated.** Added `IMAGES: 1`
+  to the read-only `docker-socket-proxy` service (opens `GET /images`,
+  `/images/{id}/json`, `/images/{id}/history`); `POST` stays `0` on this proxy
+  as before, so `/images/create` (pull) and `/images/{name}/push` remain
+  unreachable through it regardless.
+- `nuxt/ops-dashboard/test/{docker-provider,kubernetes-provider,k8s-parse,
+  container-request}.test.ts` — **updated.** New coverage for every method/
+  helper above, including the `VolumeSummary.id`/`NetworkSummary.id` behavior
+  change (an existing Kubernetes network test's expected id updated from a raw
+  uid to `namespace_name`, with a comment explaining why) and the
+  `decodeVolumeId` ambiguous-bare-name 400 path. Test suite grew from 116 (end
+  of Phase 3) to 152, all passing.
+
+### Breaking Changes
+
+None for any existing deployment's runtime behavior. `NetworkSummary.id` and
+`VolumeSummary.id` changed shape in **Kubernetes mode only** (Docker mode's
+`VolumeSummary.id` is new but equals the pre-existing `name`, so any code
+matching on `name` still matches identically on `id`) — since neither had a
+detail route to round-trip through before this phase, nothing outside this
+phase's own new code depended on the previous Kubernetes network id's exact
+value. Flagged here explicitly in case any out-of-repo consumer of the JSON
+`/api/networks`/`/api/volumes` response depended on the old shape.
+
+### Migration Steps Required
+
+None. Existing Docker-mode deployments get the four new read-only routes and
+the `IMAGES: 1` proxy toggle automatically on redeploy (no `.env`/compose
+variable changes required — `IMAGES` is not operator-configurable, unlike the
+Phase 2 `OPS_PROXY_*` toggles). Existing Kubernetes-mode deployments need no
+RBAC changes: `inspectNetwork`/`inspectVolume`/`listImages`/`inspectImage` call
+only `get`/`list` on `pods`/`services`/`persistentvolumeclaims`, the exact same
+verbs/resources `k8s/ops-dashboard-readonly-rbac.yaml` already grants — no
+update to that manifest was needed.
+
+### Rollback Plan
+
+Revert this change set; none of it is load-bearing for Phase 1–3 behavior. To
+disable just the new Docker-mode image routes without a full revert, set
+`IMAGES: 0` back on the read-only proxy — `GET /api/images*` then 5xxs at the
+proxy layer instead of the app layer, same failure shape as any other
+proxy-side-disabled section.
+
+### Verification performed
+
+- `npm run lint`, `npm run type-check` (`nuxt typecheck`), `npm test` (vitest,
+  grew from 116 to 152 tests), `npm run build` — all green.
+- **No live-cluster verification was performed** for the Kubernetes-mode
+  additions in this phase, consistent with Phase 3's own carried-forward,
+  top-priority FutureWork item — see
+  [DecisionLog](./DecisionLog.md#phase-3-shipped-unverified-against-a-real-kubernetes-cluster).
+  `listImages`/`inspectImage`/`inspectNetwork`/`inspectVolume` are exercised
+  only against hand-written mocks of `@kubernetes/client-node`, same as every
+  other Phase 3 method.
+
+---
+
 ## Change set: Phase 3 build — generic read-only Kubernetes backend — 2026-07-24
 
 Built on top of Phase 1 + Phase 2 ([`Changes.md`](#change-set-phase-2-build--gated-container-mutations-stopstartrestart--2026-07-24)).

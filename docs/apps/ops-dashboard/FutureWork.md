@@ -1,8 +1,101 @@
 # Future Work (ops-dashboard)
 
-Open items surfaced during the Phase 1, Phase 2, and Phase 3 builds, grouped by change
-set, most urgent first within each group. Related: [`Feature.md`](./Feature.md),
+Open items surfaced during the Phase 1 through Phase 5 builds, grouped by change set,
+most urgent first within each group. Related: [`Feature.md`](./Feature.md),
 [`Changes.md`](./Changes.md), [`DecisionLog.md`](./DecisionLog.md).
+
+---
+
+## Phase 5 build — gated image/volume/network mutations (named remove + prune)
+
+Related: [`Feature.md`](./Feature.md#phase-5-gated-imagevolumenetwork-mutations),
+[`Changes.md`](./Changes.md#change-set-phase-5-build--gated-imagevolumenetwork-mutations-named-remove--prune--2026-07-25),
+[`DecisionLog.md`](./DecisionLog.md#phase-5-resource-mutations-option-a-app-layer-narrowing-third-proxy).
+
+### Backlog Items Identified During This Task
+
+| Item | Category (Perf/Debt/Feature/Security/DX) | Priority | Rationale |
+|---|---|---|---|
+| `docker-socket-proxy-mutate-resources` has no per-verb carve-out — enabling it also technically admits pull/create/push/connect at the proxy layer | Security | Medium (explicitly accepted at an Approval Gate, not a silent gap) | This is the Option A tradeoff itself, not a bug found afterward. Narrowed at the app layer (`docker-resource-mutating-provider.ts` never issues those verbs), same shape as the pre-existing `ALLOW_RESTARTS`/`kill` precedent. Revisit if a future review judges this unacceptable — Option D (a custom, verb-scoped proxy) is the concrete next step, not a config tweak. See [DecisionLog](./DecisionLog.md#phase-5-resource-mutations-option-a-app-layer-narrowing-third-proxy). |
+| The volume/network client-side gate (`VolumeActions.vue`/`NetworkActions.vue`) compares `name`, but the server-side gate compares the `com.docker.compose.volume`/`com.docker.compose.network` LABEL value | Debt/DX | Low (server-side gate is the actual authority either way) | A volume/network whose name differs from its own compose-label value would show (or hide) a Remove button that the server would then correctly 403 (or allow). Not a security gap — the server re-derives the real label and is never fooled by the client's approximation — but a possible source of a confusing "button showed, then 403'd" UX for an unusual naming setup. Candidate fix: have `resource-mutations-config` (or a per-resource endpoint) return the actual label value per resource so the client can match exactly, if this is ever reported as a real annoyance. |
+| No frontend/component tests for `ImageActions.vue`/`VolumeActions.vue`/`NetworkActions.vue` or the updated list/detail pages | Test/DX | Low | Consistent with the pre-existing, carried-forward Phase 1 gap ("no tests for the Nuxt SPA pages/components themselves") — the 185-test suite covers the new server-side gate/provider/route logic exhaustively but not Vue component rendering, same as every prior phase's equivalent note. |
+| Phase 5 was not exercised against a real Docker Engine / real `docker-socket-proxy` instance | Test/Debt | Medium | Consistent with every prior Docker-mode phase in this project — verified via unit tests against dockerode/RuntimeProvider mocks, not an integration test against a live proxy. A real end-to-end run (enable all the switches, remove a real dangling image/unused volume/unused network through the UI) is the natural verification milestone before treating this phase as fully confirmed in a live deployment. |
+| Images have no configurable managed-list, only a state-based check | Feature | Low (deliberate design, not a gap) | An operator cannot restrict image removal to a named subset the way `OPS_MANAGED_VOLUMES`/`OPS_MANAGED_NETWORKS` do for those resource types — "zero references" is the only eligibility rule. This is documented as a deliberate deviation (images have no Compose-label identity to allowlist against), not an oversight; revisit only if a future need for finer-grained image allowlisting is identified. |
+
+### Deferred Technical Debt
+
+- **The Phase 5 resource-mutate proxy's broader residual risk (pull/create/push/connect
+  technically reachable at the proxy layer) is a permanent, accepted tradeoff of Option
+  A, not temporary** — mirrors how Phase 2's own residual risk (no per-container ACL at
+  the proxy layer) is carried forward rather than treated as an open bug. See the
+  backlog row above and [DecisionLog](./DecisionLog.md#phase-5-resource-mutations-option-a-app-layer-narrowing-third-proxy).
+- **Phase 5's client-side name-based allowlist approximation for volumes/networks** is a
+  one-time, already-documented simplification, not an ongoing concern — see the backlog
+  row above and each component's own doc comment.
+- **Phase 5 inherits the project's standing "no live-proxy integration test" gap** —
+  carried forward alongside Phase 1/2's own equivalent items, not tracked as a new,
+  separate debt item.
+
+### Architecture Evolution Candidates
+
+- **A custom, verb-scoped Docker socket proxy (Option D from the Phase 5 Approval
+  Gate)** would close the residual proxy-layer risk described above properly, rather
+  than relying on app-layer discipline for images/volumes/networks the way this phase
+  does. Explicitly not built this phase — judged disproportionate to the benefit given
+  the already-accepted, structurally identical `ALLOW_RESTARTS`/`kill` precedent — but
+  listed here as the concrete next step if that judgment ever changes.
+- **Real-cluster verification pass** (carried forward from Phase 3/4) remains this
+  project's top overall architecture-evolution candidate — see the Phase 3 section
+  below. Not directly relevant to Phase 5 (which is Docker-only and rejects kubernetes
+  mode outright), but still the standing top item for the project as a whole.
+- **Image pull/push, or volume/network create/connect**, if ever requested, would need
+  the same kind of fresh scoping/trust-boundary design Phase 5 itself needed relative to
+  Phase 4 — explicitly not planned today, listed here only so it isn't mistaken for
+  "just not built yet."
+
+---
+
+## Phase 4 build — read-only image listing/inspect + detail-view gaps
+
+Related: [`Feature.md`](./Feature.md#phase-4-read-only-image-listinginspect--detail-view-gaps),
+[`Changes.md`](./Changes.md#change-set-phase-4-build--read-only-image-listinginspect--two-pre-existing-detail-view-gaps--2026-07-25),
+[`DecisionLog.md`](./DecisionLog.md#volumesummaryid-and-networksummaryid-are-namespace-qualified-in-kubernetes-mode-phase-4).
+
+### Backlog Items Identified During This Task
+
+| Item | Category (Perf/Debt/Feature/Security/DX) | Priority | Rationale |
+|---|---|---|---|
+| Kubernetes-mode image data is structurally thinner than Docker's | Debt/Feature | Low (permanent structural gap, not a bug) | `size`, `createdAt`, `labels`, `layers`, `history` are all `null`/`{}` in kubernetes mode — there is no per-image Kubernetes API to source any of it from. This is carried forward as a permanent, documented limitation the same way Phase 3's health-derivation and RBAC-asymmetry gaps are — not something a future patch is expected to close. |
+| Phase 4's new Kubernetes-mode code (`inspectNetwork`, `inspectVolume`, `listImages`, `inspectImage`) inherits the pre-existing "unverified against a real cluster" gap | Test/Debt | High (same priority as the carried-forward Phase 3 item below) | Exercised only against hand-written `@kubernetes/client-node` mocks, exactly like every other Phase 3 method — no new live-cluster testing was introduced or attempted this phase. When the Phase 3 real-cluster verification milestone finally happens, these four methods should be included in that pass, not treated as separately already-verified. |
+| `NetworkSummary.id`'s value changed in kubernetes mode (uid → `namespace_name`) | Debt | Low (one-time, already communicated) | A real response-shape change for any existing kubernetes-mode `/api/networks` consumer, even though nothing inside this app depended on the old value (no detail route existed to round-trip it before this phase). Called out in [`Changes.md`](./Changes.md#change-set-phase-4-build--read-only-image-listinginspect--two-pre-existing-detail-view-gaps--2026-07-25)'s Breaking Changes and [DecisionLog](./DecisionLog.md#volumesummaryid-and-networksummaryid-are-namespace-qualified-in-kubernetes-mode-phase-4); no further action expected unless an external consumer reports breakage. |
+| No mutating capability added for images/networks/volumes | Feature | Low (deliberately out of scope, not deferred for time) | Mirrors Phase 2's own scoping discipline: this phase is a narrow read-only extension, not a step toward image pull/remove/prune or network/volume create/remove. Any future ask for that needs its own scoping/approval pass and its own trust-boundary design (a registry-pull capability in particular would be a materially different, larger surface than anything shipped so far — closer in spirit to Phase 2's rejected "rebuild" than to stop/start/restart). **Addressed in part:** Phase 5 (2026-07-25) added named remove + prune for all three resource types via exactly the fresh scoping/approval pass this row anticipated — pull/push/create/connect remain out of scope, unchanged. See [Phase 5 build](#phase-5-build--gated-imagevolumenetwork-mutations-named-remove--prune) above. |
+| No frontend/component tests for the four new pages (`images.vue`, `images/[id].vue`, `networks/[id].vue`, `volumes/[id].vue`) | Test/DX | Low | Consistent with the pre-existing, carried-forward Phase 1 gap ("no tests for the Nuxt SPA pages/components themselves") — the 152-test suite covers the new server-side logic exhaustively but not Vue component rendering. Candidate for coverage expansion if the UI grows, same reasoning as every prior phase's equivalent note. |
+| Kubernetes's `inspectNetwork` pays a real extra network round-trip (the labelSelector-scoped pod query) beyond the base `readNamespacedService` call | Perf | Low (informational, accepted tradeoff) | Exactly the tradeoff `listNetworks()`'s own FutureWork entry anticipated when flagging this as the natural place to pay the N+1 cost — acceptable at single-resource detail scale, would not be at list scale (which is why `listNetworks()` itself still doesn't do it). Not expected to matter in practice for a human clicking into one network's detail page. |
+
+### Deferred Technical Debt
+
+- **Kubernetes-mode image data's structural thinness (`size`/`createdAt`/`labels`/
+  `layers`/`history` all absent) is permanent, not temporary** — there is no
+  Kubernetes API this could be sourced from for a bare image reference. Mirrors
+  Phase 3's own "documented approximation, not a bug" framing for its other
+  Docker-concept mappings.
+- **The `NetworkSummary.id` value change in kubernetes mode is a one-time,
+  already-fully-documented breaking change**, not an ongoing concern — see the
+  backlog row above.
+- **Phase 4's Kubernetes-mode additions inherit Phase 3's unverified-against-a-
+  real-cluster status** — carried forward into that same open item, not tracked
+  separately. See
+  [DecisionLog](./DecisionLog.md#phase-3-shipped-unverified-against-a-real-kubernetes-cluster).
+
+### Architecture Evolution Candidates
+
+- **Real-cluster verification pass** (carried forward from Phase 3, now also
+  covering Phase 4's four new Kubernetes-mode methods) remains this project's top
+  architecture-evolution candidate overall — see the Phase 3 section below.
+- **Image pull/remove/prune, or network/volume create/remove**, if ever requested,
+  would need the same kind of fresh scoping/trust-boundary design Phase 2's
+  mutating surface needed relative to Phase 1 — explicitly not planned today, and
+  listed here only so it isn't mistaken for "just not built yet."
 
 ---
 
@@ -20,7 +113,7 @@ Related: [`Feature.md`](./Feature.md#phase-3-generic-read-only-kubernetes-backen
 | Kubernetes RBAC is guidance only — this app cannot enforce or verify the actual scope of the credential it's handed | Security | Medium-High (accepted, inherent — not a bug) | Unlike Docker mode's app-controlled socket-proxy, there is no enforcement layer inside this app for Kubernetes access: whatever the ambient kubeconfig grants, the app has. `k8s/ops-dashboard-readonly-rbac.yaml` is guidance for the operator to bind their own identity to, not something checked or enforced in code. A future enhancement could add a `SelfSubjectAccessReview` pre-flight check purely as an informational warning (it cannot restrict access, only report on it) if this is ever judged worth the added complexity. See [DecisionLog](./DecisionLog.md#kubernetes-rbac-is-guidance-not-enforcement-an-inherent-asymmetry-with-docker-mode). |
 | No EKS-specific integration (IAM auth, cluster discovery) | Feature | Low (deliberately out of scope) | Phase 3 is generic-Kubernetes-only by design — it relies on the operator having already run `aws eks update-kubeconfig` (or equivalent) themselves. An EKS-specific integration was evaluated and rejected in favor of genericity, consistent with this project's portability goal. See [DecisionLog](./DecisionLog.md#generic-kubernetes-provider-via-ambient-kubeconfig). Revisit only if a concrete need for in-app cluster provisioning/discovery emerges — not planned. |
 | `resolvePodService`'s ReplicaSet → Deployment name derivation strips a pod-template-hash suffix via a regex heuristic, not a real Deployment lookup | Debt | Low | Deliberate — avoids requiring RBAC on `replicasets`/`deployments` this app doesn't otherwise need (see `deploymentNameFromReplicaSet`'s own doc comment). A ReplicaSet name that doesn't match the expected `<name>-<hash>` shape falls back to the literal ReplicaSet name, which would show as a slightly-off "service" grouping in the health rollup for non-standard manifests. Not observed as a problem against any real workload yet (see the cluster-verification item above — this is exactly the kind of edge case a real cluster run would surface). |
-| `listNetworks`'s Service→pod mapping is deliberately empty (`containers: []`) | Debt/Feature | Low | Resolving backing pods per Service would require an N+1 labelSelector query per Service on a list endpoint — deliberately skipped. If a `/networks/:id` detail view is ever added (there isn't one today, for either backend), this would be the natural place to do the one extra query per-Service instead of N-per-list. |
+| ~~`listNetworks`'s Service→pod mapping is deliberately empty (`containers: []`)~~ | Debt/Feature | **Done — Phase 4 added `/networks/:id`, 2026-07-25** | Resolving backing pods per Service would require an N+1 labelSelector query per Service on a list endpoint — deliberately skipped at list scale; `listNetworks()` itself is unchanged. Phase 4's `inspectNetwork` now does the one extra query at single-resource scale, exactly the follow-up this row originally named. See the [Phase 4 build](#phase-4-build--read-only-image-listinginspect--detail-view-gaps) section below. |
 | No frontend/component changes were needed for Phase 3, so there's no new frontend test coverage to speak of, but the existing "no component tests" gap (carried from Phase 1/2) now also applies implicitly to whether `ContainerActions.vue` correctly stays hidden in kubernetes mode | Test/DX | Low | `GET /api/mutations-config` still reports gate state; in kubernetes mode `mutationsAllowed` is only true if `OPS_ALLOW_MUTATIONS=true` was also set, which would make the config endpoint say mutations are "allowed" even though the actual mutation routes would 501 — the frontend has no explicit kubernetes-mode awareness. Worth a small follow-up: either have `/api/mutations-config` report `allowed: false` outright in kubernetes mode, or add an explicit test confirming the UI degrades gracefully (a 501 on click, not a broken button) rather than assuming it. |
 | Kubernetes mode's `ping()` uses `GET /version`, a cheap but different reachability signal than Docker mode's `PING` | DX | Low (informational) | Not a bug — both are cheap, unauthenticated-content reachability probes appropriate to their respective backend — but worth noting for anyone debugging "the dashboard says the engine is unreachable" across the two modes, since the actual failure surface differs (proxy-down vs. API-server-down/kubeconfig-invalid). |
 
@@ -46,9 +139,10 @@ Related: [`Feature.md`](./Feature.md#phase-3-generic-read-only-kubernetes-backen
   backlog row above. This should also be the point at which any mocked assumptions
   that turn out wrong get corrected and this FutureWork entry updated to reflect what
   was actually found.
-- **A `/networks/:id` and `/volumes/:id` detail view** (neither backend has one today)
-  would be a natural place to add the one-extra-query-per-Service pod resolution noted
-  above, if per-network container visibility is ever requested.
+- ~~**A `/networks/:id` and `/volumes/:id` detail view**~~ — **done, shipped
+  2026-07-25.** See the [Phase 4 build](#phase-4-build--read-only-image-listinginspect--detail-view-gaps)
+  section above for what shipped (including the `VolumeSummary.id`/
+  `NetworkSummary.id` correction it required) and what's still open from it.
 - **Kubernetes-mode-aware `/api/mutations-config`** — have it explicitly report
   `allowed: false` when `runtimeMode === 'kubernetes'`, regardless of
   `OPS_ALLOW_MUTATIONS`, so the frontend gate and the actual route behavior can never

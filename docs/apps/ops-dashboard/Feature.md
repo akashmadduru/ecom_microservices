@@ -1,20 +1,41 @@
-# Feature: Ops Dashboard — Phase 1 (Read-Only Docker Observability) + Phase 2 (Gated Mutations) + Phase 3 (Read-Only Kubernetes Backend)
+# Feature: Ops Dashboard — Phase 1 (Read-Only Docker Observability) + Phase 2 (Gated Mutations) + Phase 3 (Read-Only Kubernetes Backend) + Phase 4 (Image Listing/Inspect + Detail-View Gaps) + Phase 5 (Gated Image/Volume/Network Mutations)
 
-Last verified against: `vue/ops-dashboard/` as built (Nuxt 4.5 / Nitro / dockerode),
-`.github/workflows/ci-ops-dashboard.yml`, `python/services/{api_gateway,auth_service,
-product_service,inventory_service}/Dockerfile`, and, for Phase 2, `server/runtime/
-{mutating-types,docker-mutating-provider,mutation-guard,singleton,config}.ts`,
-`docker-compose.ops.yml`, `app/components/ContainerActions.vue`; and, for Phase 3,
-`server/runtime/{kubernetes-provider,k8s-parse,health-aggregate,config,singleton,
-mutation-guard,container-request}.ts`, `k8s/ops-dashboard-readonly-rbac.yaml`,
-`README.md`, `.env.example`.
+Last verified against: `nuxt/ops-dashboard/` as built (Nuxt 4.5 / Nitro / dockerode;
+this is a rename of the `vue/ops-dashboard/` path used in this file's Phase 1–3
+prose below — left as-is rather than a repo-wide find/replace, per this doc's own
+history), `.github/workflows/ci-ops-dashboard.yml`, `python/services/{api_gateway,
+auth_service,product_service,inventory_service}/Dockerfile`, and, for Phase 2,
+`server/runtime/{mutating-types,docker-mutating-provider,mutation-guard,singleton,
+config}.ts`, `docker-compose.ops.yml`, `app/components/ContainerActions.vue`; and,
+for Phase 3, `server/runtime/{kubernetes-provider,k8s-parse,health-aggregate,config,
+singleton,mutation-guard,container-request}.ts`, `k8s/ops-dashboard-readonly-rbac.yaml`,
+`README.md`, `.env.example`; and, for Phase 4, `server/runtime/{types,docker-provider,
+kubernetes-provider,k8s-parse,container-request}.ts`, `server/routes/api/{images/
+[index,[id]],networks/[id],volumes/[id]}.get.ts`, `app/composables/useApiClient.ts`,
+`app/pages/{images.vue,images/[id].vue,networks/[id].vue,volumes/[id].vue,volumes.vue,
+networks.vue,app.vue}`, `docker-compose.ops.yml`; and, for Phase 5,
+`server/runtime/{config,singleton,types,docker-provider,kubernetes-provider,
+resource-mutating-types,docker-resource-mutating-provider,resource-mutation-guard}.ts`,
+`server/routes/api/{images/[id]/remove,images/prune,volumes/[id]/remove,volumes/prune,
+networks/[id]/remove,networks/prune,resource-mutations-config}.{post,get}.ts`,
+`app/composables/useApiClient.ts`, `app/components/{Image,Volume,Network}Actions.vue`,
+`app/pages/{images.vue,images/[id].vue,volumes.vue,volumes/[id].vue,networks.vue,
+networks/[id].vue}`, `docker-compose.ops.yml`, `.env.example`.
 
 **Grounding:** Built. Everything described below is shipped code, not a proposal.
 Phase 2 (gated stop/start/restart) shipped on top of Phase 1's read-only foundation;
-Phase 3 (a generic, read-only Kubernetes backend) shipped on top of both. This file
-covers all three. Rebuild/remove/exec remain explicitly **not** built for either
-backend — see Known Limitations and [`FutureWork.md`](./FutureWork.md). **Phase 3 has
-never been run against a real Kubernetes cluster** — see
+Phase 3 (a generic, read-only Kubernetes backend) shipped on top of both; Phase 4
+(read-only image listing/inspect, plus the `/networks/:id` and `/volumes/:id` detail
+routes Phase 3's own FutureWork entry flagged as a natural follow-up) shipped on top
+of all three; Phase 5 (gated named-remove + prune for images/volumes/networks) shipped
+on top of all four. This file covers all five. Rebuild, exec, and any create/pull/push/
+connect capability remain explicitly **not** built for either backend — see
+[Phase 5](#phase-5-gated-imagevolumenetwork-mutations), Known Limitations, and
+[`FutureWork.md`](./FutureWork.md). **Phase 3 has never been run against a real
+Kubernetes cluster**, and this remains true of Phase 4's and Phase 5's Kubernetes-mode
+code too (Phase 5's mutations are Docker-only and reject kubernetes mode outright, but
+the underlying read-only inspect calls the guard relies on inherit the same unverified
+status) — see
 [Phase 3: Generic Read-Only Kubernetes Backend](#phase-3-generic-read-only-kubernetes-backend)
 below and [DecisionLog](./DecisionLog.md#phase-3-shipped-unverified-against-a-real-kubernetes-cluster)
 for why, and what "verified" will mean going forward.
@@ -22,8 +43,9 @@ for why, and what "verified" will mean going forward.
 Related docs: [`Changes.md`](./Changes.md) (file-level changelog),
 [`DecisionLog.md`](./DecisionLog.md) (rationale for the socket-proxy trust boundary,
 the Python→Node stack pivot, the Phase 2 two-proxy correction, the Phase 3
-unverified-against-a-real-cluster decision, and other structural calls),
-[`FutureWork.md`](./FutureWork.md) (Phase 4 and other deferred items).
+unverified-against-a-real-cluster decision, the Phase 4 namespace-qualified-id
+correction, the Phase 5 Option-A residual-risk decision, and other structural calls),
+[`FutureWork.md`](./FutureWork.md) (deferred items).
 
 ## Summary
 
@@ -72,8 +94,16 @@ token is supplied. Once past the gate:
   [DecisionLog](./DecisionLog.md#env-keys-only-not-values)), plus a live log tail
   (`app/components/LogViewer.vue`) streamed over Server-Sent Events.
 - **`/networks`** — every Docker network, its driver/scope, IPAM subnets, and which
-  containers are attached.
-- **`/volumes`** — every named volume, its driver, mountpoint, and labels.
+  containers are attached; **`/networks/:id`** (Phase 4) — per-network detail: the same
+  fields plus per-container endpoint attachments (IPv4/IPv6/MAC in Docker mode) and
+  driver `Options`.
+- **`/volumes`** — every named volume, its driver, mountpoint, and labels; **`/volumes/:id`**
+  (Phase 4) — per-volume detail: the same fields plus driver `Options` and the opaque
+  `Status` blob (Docker mode only — see [Phase 4](#phase-4-read-only-image-listinginspect--detail-view-gaps)).
+- **`/images`** (Phase 4) — every image, its tags, size, creation time, dangling status,
+  and how many currently-listed containers reference it; **`/images/:id`** — per-image
+  detail: labels, filesystem layer digests, `docker history` output, and which
+  containers/pods currently reference it.
 - **`/health`** — an aggregated rollup: total/running/healthy/unhealthy/starting/
   no-healthcheck container counts overall, plus the same breakdown grouped per Compose
   service (`com.docker.compose.service` × `com.docker.compose.project`).
@@ -333,15 +363,223 @@ phase. See
 and [FutureWork.md](./FutureWork.md#phase-3-build--generic-read-only-kubernetes-backend)
 for the explicit "first real cluster run is a verification milestone" plan.
 
+## Phase 4: Read-Only Image Listing/Inspect + Detail-View Gaps
+
+Phase 4 adds the last of the four core Docker Engine resource types this dashboard
+observes — **images** — and closes two pre-existing gaps flagged in Phase 3's own
+FutureWork entry: neither `/networks/:id` nor `/volumes/:id` existed before this
+phase (both resources only had list views). Like Phase 1 and Phase 3, this phase is
+**strictly read-only**: no image pull/remove/prune, no network/volume create/remove.
+`MutatingRuntimeProvider`, `mutation-guard.ts`, and both Docker-mode socket-proxy
+instances are untouched — see [Explicitly out of scope](#phase-4-explicitly-out-of-scope)
+below.
+
+### Images: a genuinely asymmetric feature across the two backends
+
+Docker mode gets a real `docker.listImages()` / `docker.getImage(id).inspect()` /
+`.history()` — full size, creation time, labels, `RootFS.Layers` digests, and
+`docker history` output, plus which containers currently reference each image
+(cross-referenced against `listContainers()` by the container's resolved `ImageID`,
+the same pattern used for both `listImages`'s `containerCount` and `inspectImage`'s
+`referencedBy`).
+
+Kubernetes mode has **no per-image API at all** — there is no Kubernetes object that
+represents "an image" the way a Pod represents "a container." `listImages`/
+`inspectImage` there are a documented approximation: every pod's
+`containerStatuses[]` is scanned and grouped by the image it reports (the real
+`sha256:` digest when cleanly extractable from `containerStatus.imageID`, regardless
+of which container runtime's prefix wraps it; otherwise a synthetic, route-safe id —
+base64url-encoding the raw image reference, since a reference like `repo/name:tag`
+contains `/` and `:`, characters the route id charset doesn't admit — see
+`computeImageId`/`groupPodImages` in `k8s-parse.ts`). `size`, `createdAt`, `labels`,
+`layers`, and `history` are all `null`/`{}` in this mode — structural gaps, not
+oversights: no Kubernetes API surfaces any of that data for a bare image reference.
+`inspectImage` re-runs the exact same pod scan `listImages` does (there is no
+per-image lookup call to make instead) and finds the matching group by id.
+
+### `/networks/:id` and `/volumes/:id`: the two detail-view gaps close differently per backend
+
+Docker's `inspectNetwork`/`inspectVolume` are real `docker.getNetwork(id).inspect()`/
+`docker.getVolume(id).inspect()` calls — richer than slicing the list response, the
+same way `inspectContainer` has always been a real inspect rather than a reuse of
+`listContainers()`'s summary shape. This surfaces per-container endpoint detail
+(IPv4/IPv6/MAC address per network attachment) and driver `Options` for networks,
+and driver `Options` plus the opaque, driver-specific `Status` blob for volumes —
+none of which the list endpoints exposed before this phase (`NetworkDetail`/
+`VolumeDetail` are new types in `server/runtime/types.ts`).
+
+Kubernetes's `inspectNetwork` does the one extra labelSelector-scoped pod query per
+Service that `listNetworks()` deliberately skips at list scale (an N+1 query
+problem across every Service in scope) — exactly the follow-up
+[FutureWork.md](./FutureWork.md) named when that list-scale gap was first
+identified: "if a `/networks/:id` detail view is ever added... this would be the
+natural place to do the one extra query per-Service instead of N-per-list."
+
+Kubernetes's `inspectVolume` required a genuine, pre-existing bug fix, not just a
+new route. `VolumeSummary` had no `id` field distinct from `name` before this phase.
+A PersistentVolumeClaim name is only unique **within its namespace** — with this
+project's default "all namespaces" scope (`K8S_NAMESPACE` unset), two different
+namespaces can produce two `VolumeSummary` rows with the identical `name`, a real
+collision no code before this phase needed to resolve, because nothing looked a
+volume up by name/id; `/volumes/:id` is the first thing that does. `VolumeSummary.id`
+is now `name` in Docker mode (identical — a Docker volume name already is its
+identity) and `namespace_name` in Kubernetes mode (the same encoding `k8s-parse.ts`
+already uses for pod ids, via `encodePodId`). A bare, separator-less volume id (a
+plausible thing for an operator to type by hand) is genuinely ambiguous in
+all-namespaces mode, not just malformed input, so `decodeVolumeId` throws its own
+distinct, actionable 400 rather than reusing the pod-id decoder's generic
+malformed-input message.
+
+`NetworkSummary.id` in Kubernetes mode changed for a related reason: it used to be
+`svc.metadata.uid`, falling back to `namespace_name` only when a uid was absent
+(which real clusters never leave absent) — a bare Kubernetes uid cannot actually be
+used to look up a Service (there is no "get by uid" call, and `metadata.uid` isn't a
+supported field selector), so the id had to become the decodable `namespace_name`
+form for `/networks/:id` to be implementable at all. Full reasoning:
+[DecisionLog](./DecisionLog.md#volumesummaryid-and-networksummaryid-are-namespace-qualified-in-kubernetes-mode-phase-4).
+
+### Explicitly out of scope {#phase-4-explicitly-out-of-scope}
+
+No mutating capability for any of images/networks/volumes — no pull, no remove, no
+prune, no create. This is a deliberate, narrow read-only extension of the existing
+Phase 1/3 read-only surface, not a step toward Phase 2-style mutations for these
+resource types; any future request to add mutation for images/networks/volumes needs
+its own scoping/approval pass, mirroring how Phase 2 itself needed one relative to
+Phase 1 (see [DecisionLog](./DecisionLog.md#phase-2-mutation-scope-stopstartrestart-only-rebuild-ruled-out)).
+
+**Addressed:** Phase 5 shipped 2026-07-25 — see
+[Phase 5: Gated Image/Volume/Network Mutations](#phase-5-gated-imagevolumenetwork-mutations)
+below for the resulting design, built via exactly the fresh scoping/approval pass this
+note anticipated.
+
+## Phase 5: Gated Image/Volume/Network Mutations
+
+Phase 5 extends Phase 2's gated-mutation posture — global kill switch + per-target
+eligibility, off by default, fully audit-logged — to the three resource types Phase 4
+made read-only-observable. Unlike Phase 2's stop/start/restart, this phase implements
+**named remove**, not merely prune, per an explicit product requirement resolved at an
+Approval Gate ("Option A" — see
+[DecisionLog](./DecisionLog.md#phase-5-resource-mutations-option-a-app-layer-narrowing-third-proxy)
+for the full four-option tradeoff analysis). Create, pull, push, and connect remain
+explicitly **not** built for any of the three resource types, and no route or provider
+method exists that could reach those verbs — see
+[Explicitly out of scope](#phase-5-explicitly-out-of-scope) below.
+
+### Named remove, not just prune — and the proxy-layer tradeoff that comes with it
+
+Before implementation, the pinned `tecnativa/docker-socket-proxy:v0.4.2` image's real
+`haproxy.cfg.template` was read directly (repeating the verification discipline that
+caught Phase 2's own near-miss). The finding: containers have independent, path-specific
+`ALLOW_START`/`ALLOW_STOP`/`ALLOW_RESTARTS` rules that work without needing
+`CONTAINERS=1` at all — that's what makes Phase 2's mutate proxy genuinely narrow.
+**Images/volumes/networks have no equivalent per-verb carve-out.** The only way to admit
+`DELETE /images/{id}`, `POST /images/prune`, `DELETE /volumes/{name}`,
+`POST /volumes/prune`, `DELETE /networks/{id}`, or `POST /networks/prune` through this
+proxy is enabling the resource's own section (`IMAGES`/`VOLUMES`/`NETWORKS`) together
+with `POST` — and each section also covers other verbs under the same path prefix:
+`IMAGES=1` also admits `POST /images/create` (pull) and `/images/{name}/push`;
+`VOLUMES=1` also admits `POST /volumes/create`; `NETWORKS=1` also admits
+`POST /networks/create`, `/networks/{id}/connect`, `/networks/{id}/disconnect`.
+
+The accepted tradeoff (Option A): disclose this proxy-layer residual risk explicitly
+(here, in `docker-compose.ops.yml`'s own comment block, and in `.env.example`) and
+narrow the *actual* behavior at the **app layer** instead.
+`docker-resource-mutating-provider.ts`'s dockerode calls are hardcoded to only ever
+issue `getImage(id).remove()`, `pruneImages({filters:{dangling:['true']}})` (filter
+hardcoded, never caller-supplied), `getVolume(name).remove()`, `pruneVolumes()`,
+`getNetwork(id).remove()`, `pruneNetworks()` — never create/pull/push/connect, and no
+`ImageMutatingProvider`/`VolumeMutatingProvider`/`NetworkMutatingProvider` method exists
+that could reach those verbs even by accident. This mirrors the already-accepted
+precedent that Phase 2's `ALLOW_RESTARTS` also technically covers `kill` at the proxy
+layer even though this app never calls it.
+
+### A third, separate proxy — never shared with either existing one
+
+Resource mutations run through a **third** `docker-socket-proxy-mutate-resources`
+container, reached via a **third**, independent dockerode client
+(`getResourceMutatingDockerClient()`/`get{Image,Volume,Network}MutatingProvider()` in
+`singleton.ts`, using `RESOURCE_MUTATE_DOCKER_HOST`/`PORT`) — never the read-only
+client/proxy, and never Phase 2's container-mutate client/proxy either. This extends
+Phase 2's own "never share a client/proxy across mutation surfaces" discipline by one
+more instance, specifically so a compromised network path to this (real pull/create/
+push/connect-capable, once enabled) proxy cannot also reach the container-lifecycle
+proxy's blast radius, or vice versa.
+
+### The two gates, per resource type
+
+Enforced in `server/runtime/resource-mutation-guard.ts` — a new sibling file;
+`mutation-guard.ts` itself is completely untouched by this phase.
+
+- **Named remove** (two gates, mirrors `runContainerMutation` exactly): (1) the global
+  kill switch `OPS_ALLOW_RESOURCE_MUTATIONS`, checked before any inspect; (2) a
+  per-target eligibility check. For **volumes** and **networks** this is a Compose-label
+  allowlist — `OPS_MANAGED_VOLUMES`/`OPS_MANAGED_NETWORKS` matched against the
+  `com.docker.compose.volume`/`com.docker.compose.network` label value, re-derived from
+  a fresh inspect, same shape as Phase 2's `OPS_MANAGED_SERVICES`. For **images** this is
+  a state check instead — the target must currently have **zero** referencing containers
+  (`containerCount === 0`, re-derived from a fresh `inspectImage` call) — because an
+  image has no Compose-label identity of its own to allowlist against: the same image can
+  back zero, one, or many containers at once, unlike a container, which belongs to
+  exactly one compose service. This is a deliberate deviation from the allowlist shape
+  used everywhere else in this project, not an inconsistency.
+- **Prune** (single gate only): the global kill switch, and nothing else — there is no
+  target, so there is deliberately no per-target eligibility check. Docker's own
+  engine-level prune (images: hardcoded `dangling: true`; volumes/networks: no filter,
+  relying on the engine's own "unused only" default scoping) is the real backstop that
+  keeps prune bounded to unused resources.
+
+Both gates reject kubernetes mode outright with `501 Not Implemented`, checked first,
+before any inspect or provider construction — resource mutations are Docker-only,
+matching Phase 2's existing kubernetes rejection.
+
+### Audit trail (Phase 5)
+
+Same shape and philosophy as Phase 2's audit trail (structured JSON lines to stdout, no
+persistence, no per-user identity — see
+[DecisionLog](./DecisionLog.md#mutation-audit-trail-stdout-json-no-persistence)), with a
+distinct event name (`ops.resource_mutation` vs. Phase 2's `ops.mutation`) and
+`resourceType`/`resourceId` fields in place of `service`/`containerId`, so a log
+consumer can tell the two mutation surfaces apart without parsing free text.
+
+### Frontend gating (Phase 5)
+
+`GET /api/resource-mutations-config` exposes `{allowed, managedVolumes, managedNetworks}`
+— a **separate** endpoint from Phase 2's `mutations-config`, which is untouched (its
+`{allowed, managedServices}` contract still backs `ContainerActions.vue` exactly as
+before). `ImageActions.vue`/`VolumeActions.vue`/`NetworkActions.vue` render a Remove
+button only when eligible, mirroring `ContainerActions.vue`'s "controls absent, not
+disabled, when ineligible" pattern and its native-`confirm()` guard exactly.
+`ImageActions` checks `allowed && containerCount === 0` (images have no managed-list to
+check against, matching the server-side gate's own state-based shape). `VolumeActions`/
+`NetworkActions` check `allowed && managedVolumes/managedNetworks.includes(name)` — a
+client-side name-based approximation of the server's label-based check (the two could
+theoretically diverge for a volume/network whose name differs from its own compose-label
+value; the server-side gate is the actual authority in either direction, so at worst this
+shows a button the server would then correctly 403, or hides one the server would have
+allowed). A page-level "Prune unused" button on `images.vue`/`volumes.vue`/`networks.vue`
+is gated only on the global switch (prune has no per-target eligibility), with its own
+`confirm()` guard.
+
+### Explicitly out of scope {#phase-5-explicitly-out-of-scope}
+
+Image create/pull/push, volume/network create/connect/disconnect, container create/run/
+exec/rebuild, `docker cp` — none of these are implemented, and no route or provider
+method exists that could enable them. No existing proxy's `POST`/section toggles were
+loosened beyond what's specified above; the read-only proxy and the Phase 2
+container-mutate proxy are both untouched. Any future request to add pull/push/create/
+connect needs its own fresh scoping/approval pass, exactly as this phase itself was
+Phase 4's own deferred item revisited with one.
+
 ## Impacted Files
 
-New project tree, `vue/ops-dashboard/` (see the README's "Project layout" section for
+New project tree, `nuxt/ops-dashboard/` (see the README's "Project layout" section for
 the full annotated tree). Outside that directory: `.github/workflows/
 ci-ops-dashboard.yml` (new), `python/services/{api_gateway,auth_service,
 product_service,inventory_service}/Dockerfile` (`HEALTHCHECK` line added to each, no
 other changes); `k8s/ops-dashboard-readonly-rbac.yaml` (new, Phase 3 — guidance-only
-RBAC manifest, not consumed by any code). Full file-level table, all three phases:
-[`Changes.md`](./Changes.md).
+RBAC manifest, not consumed by any code; unchanged by Phase 4/5 — no Phase 5 code path
+touches Kubernetes, so the manifest needs no new grants). Full file-level table, all
+five phases: [`Changes.md`](./Changes.md).
 
 ## Configuration / Feature Flags
 
@@ -362,17 +600,28 @@ mutation gates function as one. All environment variables are read directly from
 | `MUTATE_DOCKER_PORT` | No | `2375` | TCP port of the mutate-only socket proxy (docker mode only). |
 | `OPS_ALLOW_MUTATIONS` | No | `false`-equivalent (any value other than exactly `"true"`) | Phase 2 global kill switch. No effect in kubernetes mode — mutation routes already return `501` there regardless. |
 | `OPS_MANAGED_SERVICES` | No | empty (nothing mutable) | Phase 2 comma-separated Compose service allowlist. |
+| `RESOURCE_MUTATE_DOCKER_HOST` | No | `docker-socket-proxy-mutate-resources` | Hostname of the **third**, dedicated image/volume/network mutate-only socket proxy (Phase 5, docker mode only). |
+| `RESOURCE_MUTATE_DOCKER_PORT` | No | `2375` | TCP port of the resource mutate-only socket proxy (docker mode only). |
+| `OPS_ALLOW_RESOURCE_MUTATIONS` | No | `false`-equivalent (any value other than exactly `"true"`) | Phase 5 global kill switch, independent of `OPS_ALLOW_MUTATIONS`. No effect in kubernetes mode — these routes already return `501` there regardless. |
+| `OPS_MANAGED_VOLUMES` | No | empty (nothing removable) | Phase 5 comma-separated `com.docker.compose.volume` label allowlist. |
+| `OPS_MANAGED_NETWORKS` | No | empty (nothing removable) | Phase 5 comma-separated `com.docker.compose.network` label allowlist. Images have no equivalent var — eligibility there is state-based (zero live container references). |
 
-In `kubernetes` mode, `DOCKER_*`/`MUTATE_DOCKER_*` are ignored entirely and the cluster
-is reached via the ambient kubeconfig (`KUBECONFIG`/`~/.kube/config`/in-cluster service
-account) — not via any env var this app defines.
+In `kubernetes` mode, `DOCKER_*`/`MUTATE_DOCKER_*`/`RESOURCE_MUTATE_DOCKER_*` are
+ignored entirely and the cluster is reached via the ambient kubeconfig
+(`KUBECONFIG`/`~/.kube/config`/in-cluster service account) — not via any env var this
+app defines.
 
 Compose-only proxy toggles (not read by the app itself, only by
 `docker-socket-proxy-mutate` in `docker-compose.ops.yml`): `OPS_PROXY_POST`,
 `OPS_PROXY_ALLOW_START`, `OPS_PROXY_ALLOW_STOP`, `OPS_PROXY_ALLOW_RESTARTS` — all
 default to `0`. Enabling mutations end to end requires setting all four of these
 **and** `OPS_ALLOW_MUTATIONS=true` **and** a non-empty `OPS_MANAGED_SERVICES`; missing
-any one of the seven leaves mutations off.
+any one of the seven leaves mutations off. Separately, `docker-socket-proxy-mutate-resources`
+has its own four Compose-only toggles: `OPS_PROXY_RESOURCE_IMAGES`,
+`OPS_PROXY_RESOURCE_VOLUMES`, `OPS_PROXY_RESOURCE_NETWORKS`, `OPS_PROXY_RESOURCE_POST` —
+all default to `0`; enabling resource mutations end to end requires all four of these
+**and** `OPS_ALLOW_RESOURCE_MUTATIONS=true` **and** (for volumes/networks) a non-empty
+`OPS_MANAGED_VOLUMES`/`OPS_MANAGED_NETWORKS`.
 
 ## Rollout Plan
 
@@ -383,23 +632,28 @@ Two supported Docker run paths, both documented in `vue/ops-dashboard/README.md`
    install && npm run build && npm start`, pointed at it via `DOCKER_HOST`/`DOCKER_PORT`.
    Adding Phase 2 mutations this way means standing up a **second**, separately
    configured proxy instance and pointing `MUTATE_DOCKER_HOST`/`MUTATE_DOCKER_PORT` at
-   it — the README is explicit that this second proxy must never be the same instance
-   as the read-only one.
+   it; adding Phase 5 resource mutations means standing up a **third**, separately
+   configured proxy instance and pointing `RESOURCE_MUTATE_DOCKER_HOST`/`PORT` at it —
+   the README is explicit that none of these three proxy instances may ever be the same
+   one.
 2. **Batteries included** — `docker compose -f docker-compose.ops.yml up --build` from
-   `vue/ops-dashboard/`, which now brings up **three** containers on the dedicated
+   `vue/ops-dashboard/`, which now brings up **four** containers on the dedicated
    `ops_network` bridge (never the platform's `ecom_network`): the read-only
-   `docker-socket-proxy`, the new `docker-socket-proxy-mutate`, and the dashboard
-   itself — with the dashboard's port published to `127.0.0.1` only. Mutations stay
-   off by default even with this compose file (`OPS_ALLOW_MUTATIONS` and the four
-   `OPS_PROXY_*` toggles all default to disabled); an operator must explicitly opt in.
+   `docker-socket-proxy`, `docker-socket-proxy-mutate` (Phase 2), the new
+   `docker-socket-proxy-mutate-resources` (Phase 5), and the dashboard itself — with the
+   dashboard's port published to `127.0.0.1` only. Mutations of both kinds stay off by
+   default even with this compose file (`OPS_ALLOW_MUTATIONS`/`OPS_ALLOW_RESOURCE_MUTATIONS`
+   and all eight `OPS_PROXY_*` toggles default to disabled); an operator must explicitly
+   opt in to each independently.
 
 Phase 3's Kubernetes mode is a **third, independent run path**, not wired into either
 compose file above: `RUNTIME_MODE=kubernetes` plus a `KUBECONFIG` pointed at a
 read-only-bound identity (see [Phase 3](#phase-3-generic-read-only-kubernetes-backend)
 and the RBAC manifest at `k8s/ops-dashboard-readonly-rbac.yaml`), same
-`npm install && npm run build && npm start`. It does not require or interact with
-either `docker-socket-proxy` container — `DOCKER_HOST`/`MUTATE_DOCKER_HOST` are simply
-ignored in this mode.
+`npm install && npm run build && npm start`. It does not require or interact with any
+`docker-socket-proxy*` container — `DOCKER_HOST`/`MUTATE_DOCKER_HOST`/
+`RESOURCE_MUTATE_DOCKER_HOST` are simply ignored in this mode, and Phase 5's mutation
+routes reject it outright with `501`.
 
 `OPS_API_TOKEN` must be supplied by the operator in all paths — there is no default
 and no compose-baked value. No database migrations, no cross-service coordination, and
@@ -412,17 +666,35 @@ backward compatible: an operator who upgrades and does nothing gets the read-onl
 Phase 1 behavior exactly as before, plus one extra idle proxy container in the
 batteries-included path. Phase 3's addition is fully backward compatible for the same
 reason: `RUNTIME_MODE` defaults to `docker`, so an operator who sets nothing gets
-exactly the pre-Phase-3 behavior.
+exactly the pre-Phase-3 behavior. Phase 5's addition is backward compatible for the
+same reason as Phase 2's: an operator who upgrades and sets nothing gets exactly the
+pre-Phase-5 behavior, plus one more idle proxy container in the batteries-included path.
 
 ## Known Limitations
 
 Full detail and status in [`FutureWork.md`](./FutureWork.md):
 
-- **No rebuild, remove, or exec capability.** Rebuild in particular was evaluated and
-  explicitly ruled out (not just deferred) as the single highest-RCE-risk capability
-  named in the original ask — it would require build-context/source access this
-  standalone project deliberately doesn't have. Stop/start/restart are the full extent
-  of Phase 2's mutating surface. See [Phase 2: Gated Container Mutations](#phase-2-gated-container-mutations).
+- **No container rebuild, remove, or exec capability.** Rebuild in particular was
+  evaluated and explicitly ruled out (not just deferred) as the single highest-RCE-risk
+  capability named in the original ask — it would require build-context/source access
+  this standalone project deliberately doesn't have. Stop/start/restart are the full
+  extent of Phase 2's *container* mutating surface — this remains true after Phase 5,
+  which only added remove/prune for images/volumes/networks, never for containers. See
+  [Phase 2: Gated Container Mutations](#phase-2-gated-container-mutations).
+- **No image pull/push, and no volume/network create/connect/disconnect.** Phase 5 added
+  named remove + prune for images/volumes/networks, deliberately nothing else — see
+  [Phase 5](#phase-5-gated-imagevolumenetwork-mutations) and
+  [Explicitly out of scope](#phase-5-explicitly-out-of-scope).
+- **Phase 5's resource-mutate proxy has a disclosed, accepted proxy-layer residual
+  risk broader than Phase 2's.** Unlike the container-mutate proxy's per-verb
+  `ALLOW_START`/`ALLOW_STOP`/`ALLOW_RESTARTS` carve-out, `tecnativa/docker-socket-proxy`
+  has no equivalent for images/volumes/networks — enabling `IMAGES`/`VOLUMES`/
+  `NETWORKS`+`POST` on `docker-socket-proxy-mutate-resources` also technically admits
+  pull/create/push/connect at the *proxy* layer. This app's own dockerode calls never
+  issue those verbs (narrowed at the app layer instead), and this was an explicit,
+  informed Approval Gate decision ("Option A"), not an oversight. See
+  [Phase 5](#phase-5-gated-imagevolumenetwork-mutations) and
+  [DecisionLog](./DecisionLog.md#phase-5-resource-mutations-option-a-app-layer-narrowing-third-proxy).
 - **Phase 3's Kubernetes backend has never been run against a real cluster.** Built,
   reviewed, and shipped entirely against `@kubernetes/client-node`'s published
   types/docs and hand-written mocks — no kubeconfig, no kind/minikube, no live API
@@ -438,20 +710,34 @@ Full detail and status in [`FutureWork.md`](./FutureWork.md):
   enforce that those credentials are actually read-only. See
   [Phase 3](#phase-3-generic-read-only-kubernetes-backend) and
   [DecisionLog](./DecisionLog.md#kubernetes-rbac-is-guidance-not-enforcement-an-inherent-asymmetry-with-docker-mode).
-- **No EKS-specific or Phase 4 integration.** Phase 3 is generic Kubernetes only —
-  there is no AWS SDK/IAM code, and this repo's `terraform/` EKS setup is currently a
-  bare VPC+EKS skeleton with no real cluster provisioned yet, which is also why Phase 3
-  could not be verified against a live cluster (see above).
+- **No EKS-specific integration.** Phase 3 is generic Kubernetes only — there is no
+  AWS SDK/IAM code, and this repo's `terraform/` EKS setup is currently a bare
+  VPC+EKS skeleton with no real cluster provisioned yet, which is also why Phase 3
+  could not be verified against a live cluster (see above). (Previous revisions of
+  this doc referred to this gap as "Phase 4" before that number was taken by the
+  image-listing/detail-view-gaps phase actually shipped below — an EKS-specific
+  integration remains unplanned and unnumbered.)
+- **Kubernetes-mode image data is structurally thinner than Docker mode's.**
+  `size`, `createdAt`, `labels`, `layers`, and `history` are all `null`/`{}` for
+  every image in Kubernetes mode — there is no per-image Kubernetes API to source
+  any of that data from, so this is a permanent, structural gap, not a temporary
+  one. See [Phase 4](#phase-4-read-only-image-listinginspect--detail-view-gaps).
+- **`NetworkSummary.id`'s value changed in Kubernetes mode (Phase 4).** Existing
+  Kubernetes-mode `/api/networks` consumers relying on the previous uid-shaped id
+  will see a `namespace_name`-shaped one instead — necessary for `/networks/:id` to
+  be implementable at all (a bare uid cannot be looked up via the Kubernetes API).
+  See [DecisionLog](./DecisionLog.md#volumesummaryid-and-networksummaryid-are-namespace-qualified-in-kubernetes-mode-phase-4).
 - **Single static bearer token, no per-user identity.** Anyone holding the token has
-  the same access as anyone else, for both reads (Phase 1) and now mutations
-  (Phase 2); there's no way to distinguish *who* stopped/started/restarted a
-  container beyond "someone with the token" — the Phase 2 audit log records the
+  the same access as anyone else, for both reads (Phase 1) and mutations of every kind
+  (Phase 2 container lifecycle, Phase 5 resource remove/prune); there's no way to
+  distinguish *who* acted beyond "someone with the token" — both audit logs record the
   action, not the actor. Accepted for this phase; would need a real identity layer to
   improve.
-- **The mutate-only proxy has no per-container ACL** — it restricts which *verbs*
-  (start/stop/restart/kill) are reachable, not which *container IDs* they can target;
-  `OPS_MANAGED_SERVICES` is enforced entirely at the app layer, not the proxy layer.
-  This is an accepted residual risk, not a bug — full detail in
+- **The mutate proxies have no per-resource ACL** — the Phase 2 mutate proxy restricts
+  which *verbs* (start/stop/restart/kill) are reachable, not which *container IDs* they
+  can target (`OPS_MANAGED_SERVICES` is enforced entirely at the app layer); the Phase 5
+  resource-mutate proxy is the same shape, one level broader (see the dedicated bullet
+  above). This is an accepted residual risk, not a bug — full detail in
   [FutureWork.md](./FutureWork.md#phase-2-build--gated-container-mutations) and
   [DecisionLog](./DecisionLog.md#second-dedicated-mutate-only-docker-socket-proxy-instead-of-widening-the-read-only-one).
 - **A handful of Nuxt 4.5/h3-v2 framework helpers (`getRequestHeader`, `getQuery`,
