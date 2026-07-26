@@ -238,6 +238,51 @@ export interface ImageDetail extends ImageSummary {
   referencedBy: ImageReference[]
 }
 
+/**
+ * One `FROM` stage of a Dockerfile. `name` is the `AS <name>` alias when
+ * present (e.g. `builder`), or null for an unnamed final stage — both shapes
+ * are real in this repo's own 7 Dockerfiles (see `dockerfile-parse.ts`).
+ */
+export interface DockerfileStage {
+  name: string | null
+  baseImage: string
+}
+
+/**
+ * List-view summary for one entry of the FIXED, hardcoded Dockerfile allowlist
+ * (see `dockerfile-registry.ts` — never a filesystem glob). `baseImage` is the
+ * FINAL stage's base image (what actually ships), not an intermediate build
+ * stage's — mirrors `ImageSummary`/`ContainerSummary` reporting the shipped
+ * artifact, not build-time internals.
+ */
+export interface DockerfileSummary {
+  id: string
+  /** Human label, e.g. the service name. */
+  label: string
+  /** Repo-root-relative build context this Dockerfile is built with (`.` = repo root). */
+  buildContext: string
+  baseImage: string
+  exposedPorts: number[]
+  stageCount: number
+}
+
+/**
+ * Detail view: the full parsed structure of one Dockerfile, plus its raw
+ * source for a raw-view toggle. `argNames`/`envNames` are NAMES ONLY, never
+ * values — see `dockerfile-parse.ts`'s doc comment for why this mirrors
+ * `ContainerDetail.envKeys`'s existing precedent even though the risk profile
+ * here is genuinely lower (Dockerfile content is already-committed source, not
+ * a runtime-injected secret).
+ */
+export interface DockerfileDetail extends DockerfileSummary {
+  stages: DockerfileStage[]
+  entrypoint: string | null
+  cmd: string | null
+  argNames: string[]
+  envNames: string[]
+  rawContent: string
+}
+
 export interface HealthServiceRollup {
   service: string
   project: string | null

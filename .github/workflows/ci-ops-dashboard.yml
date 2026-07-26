@@ -2,21 +2,25 @@ name: ops-dashboard CI
 
 # Standalone project: deliberately does NOT use _reusable-node-app-ci.yml, which
 # assumes npm-workspace semantics ops-dashboard intentionally doesn't have. This
-# workflow does its own npm ci / lint / type-check / test / build. Path filter is
-# scoped to the project (plus this workflow file) so it never fires on unrelated
-# changes, and vice versa.
+# workflow does its own npm ci / lint / type-check / test / build steps. Path
+# filter is scoped to the project (plus this workflow file) so it never fires on
+# unrelated changes, and vice versa.
+#
+# NOTE: this workflow's paths/working-directory/context all point at
+# `nuxt/ops-dashboard` — the project's CURRENT location. It used to live at
+# `vue/ops-dashboard` before a rename; this workflow was left stale (still
+# pointed at the old path) until Phase 6 fixed it, which is why it wasn't
+# actually triggering on real changes to this app before then.
 on:
   pull_request:
     paths:
-      - 'vue/ops-dashboard/**'
+      - 'nuxt/ops-dashboard/**'
       - '.github/workflows/ci-ops-dashboard.yml'
-      - '.github/workflows/_reusable-docker-build-push.yml'
   push:
     branches: [main]
     paths:
-      - 'vue/ops-dashboard/**'
+      - 'nuxt/ops-dashboard/**'
       - '.github/workflows/ci-ops-dashboard.yml'
-      - '.github/workflows/_reusable-docker-build-push.yml'
 
 concurrency:
   group: ci-ops-dashboard-${{ github.ref }}
@@ -30,7 +34,7 @@ jobs:
       contents: read
     defaults:
       run:
-        working-directory: vue/ops-dashboard
+        working-directory: nuxt/ops-dashboard
     steps:
       - uses: actions/checkout@v4
 
@@ -38,7 +42,7 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: vue/ops-dashboard/package-lock.json
+          cache-dependency-path: nuxt/ops-dashboard/package-lock.json
 
       - name: Install
         run: npm ci
@@ -53,18 +57,74 @@ jobs:
         run: npm test
 
       - name: Build
+        # `prebuild` (npm's automatic lifecycle hook) regenerates
+        # server/generated/dockerfile-manifest.json from this job's own full
+        # checkout before `nuxt build` runs — exercising the same snapshot
+        # script the dedicated step below also runs, so a broken script fails
+        # this job, not just silently degrades the later Docker build.
         run: npm run build
 
   docker:
     needs: [lint-test-build]
-    uses: ./.github/workflows/_reusable-docker-build-push.yml
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: read
       packages: write
-    with:
-      # Standalone: the build context is the project directory itself; it needs
-      # nothing from outside vue/ops-dashboard.
-      context: vue/ops-dashboard
-      dockerfile-path: vue/ops-dashboard/Dockerfile
-      image-name: ghcr.io/${{ github.repository_owner }}/ecom-microservices-ops-dashboard
-      push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      # Phase 6: this Docker build's `context:` is narrowed to
+      # nuxt/ops-dashboard/ below (like every other service's build), so the
+      # snapshot script would NOT be able to see the other 6 services'
+      # Dockerfiles if it ran inside the Docker build itself. It must run here
+      # instead, as its own step, against THIS job's full checkout (actions/
+      # checkout@v4 always checks out the whole repo) — by the time the Docker
+      # build step below runs, the manifest file already exists on disk inside
+      # nuxt/ops-dashboard/server/generated/, and gets picked up by the
+      # Dockerfile's normal `COPY . .` step like any other project file. This
+      # is also why this job does its own inline build-push steps rather than
+      # calling `_reusable-docker-build-push.yml` (shared by every other
+      # service's CI): that reusable workflow does its own, separate
+      # `actions/checkout` inside its own job with no opportunity to inject
+      # this extra step beforehand, and widening it with an ops-dashboard-
+      # specific option isn't worth complicating a template 6 other services
+      # share for the sake of one caller's need — the same judgment call this
+      # workflow's own `lint-test-build` job already made for install/lint/
+      # type-check/test/build (see this file's own top-of-file comment).
+      - name: Snapshot Dockerfiles for the dashboard's read-only Dockerfile view
+        run: node nuxt/ops-dashboard/scripts/snapshot-dockerfiles.mjs
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute tags
+        id: tags
+        run: |
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-12)
+          IMAGE=ghcr.io/${{ github.repository_owner }}/ecom-microservices-ops-dashboard
+          {
+            echo "image=${IMAGE}"
+            echo "sha_tag=${IMAGE}:sha-${SHORT_SHA}"
+            echo "latest_tag=${IMAGE}:latest"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build (and push on main only)
+        uses: docker/build-push-action@v6
+        with:
+          context: nuxt/ops-dashboard
+          file: nuxt/ops-dashboard/Dockerfile
+          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          tags: |
+            ${{ steps.tags.outputs.sha_tag }}
+            ${{ steps.tags.outputs.latest_tag }}
+          cache-from: type=gha,scope=${{ steps.tags.outputs.image }}
+          cache-to: type=gha,mode=max,scope=${{ steps.tags.outputs.image }}

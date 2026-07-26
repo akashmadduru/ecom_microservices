@@ -74,10 +74,13 @@ function formatSize(bytes: number | null): string {
       @select="openDetail"
     >
       <template #cell-repoTags="{ row }">
-        <span :class="{ muted: row.dangling }">{{ row.repoTags.join(', ') || '(dangling)' }}</span>
+        <TextPopover
+          :text="row.repoTags.join(', ') || '(dangling)'"
+          :class="{ muted: row.dangling }"
+        />
       </template>
       <template #cell-size="{ row }">{{ formatSize(row.size) }}</template>
-      <template #cell-createdAt="{ row }">{{ row.createdAt ?? '—' }}</template>
+      <template #cell-createdAt="{ row }">{{ formatDate(row.createdAt) }}</template>
       <template #cell-dangling="{ row }">{{ row.dangling ? 'yes' : 'no' }}</template>
       <template #cell-actions="{ row }">
         <ImageActions :image-id="row.id" :container-count="row.containerCount" @done="refresh()" />
@@ -87,32 +90,8 @@ function formatSize(bytes: number | null): string {
 </template>
 
 <style scoped>
-.page-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 1rem;
-}
 .page-head h1 {
   margin: 0;
   font-size: 1.3rem;
-}
-.page-head__actions {
-  display: flex;
-  gap: 0.5rem;
-}
-.page-head button {
-  background: transparent;
-  border: 1px solid var(--border);
-  color: inherit;
-  border-radius: 0.4rem;
-  padding: 0.35rem 0.8rem;
-  cursor: pointer;
-}
-.error {
-  color: #ff7b72;
-}
-.muted {
-  color: var(--muted);
 }
 </style>

@@ -27,30 +27,32 @@ function cellText(row: T, col: Column<T>): string {
 </script>
 
 <template>
-  <table class="data-table">
-    <thead>
-      <tr>
-        <th v-for="col in props.columns" :key="col.key">{{ col.label }}</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr
-        v-for="row in props.rows"
-        :key="props.rowKey(row)"
-        class="data-table__row"
-        @click="emit('select', row)"
-      >
-        <td v-for="col in props.columns" :key="col.key">
-          <slot :name="`cell-${col.key}`" :row="row">{{ cellText(row, col) }}</slot>
-        </td>
-      </tr>
-      <tr v-if="props.rows.length === 0">
-        <td :colspan="props.columns.length" class="data-table__empty">
-          {{ props.emptyText ?? 'No data.' }}
-        </td>
-      </tr>
-    </tbody>
-  </table>
+  <div class="data-table__scroll">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th v-for="col in props.columns" :key="col.key">{{ col.label }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr
+          v-for="row in props.rows"
+          :key="props.rowKey(row)"
+          class="data-table__row"
+          @click="emit('select', row)"
+        >
+          <td v-for="col in props.columns" :key="col.key">
+            <slot :name="`cell-${col.key}`" :row="row">{{ cellText(row, col) }}</slot>
+          </td>
+        </tr>
+        <tr v-if="props.rows.length === 0">
+          <td :colspan="props.columns.length" class="data-table__empty">
+            {{ props.emptyText ?? 'No data.' }}
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
 </template>
 
 <style scoped>
@@ -63,22 +65,22 @@ function cellText(row: T, col: Column<T>): string {
 .data-table td {
   text-align: left;
   padding: 0.5rem 0.75rem;
-  border-bottom: 1px solid var(--border, #2a2f3a);
+  border-bottom: 1px solid var(--border);
   white-space: nowrap;
 }
 .data-table th {
-  color: var(--muted, #9aa4b2);
+  color: var(--muted);
   font-weight: 600;
   text-transform: uppercase;
   font-size: 0.7rem;
   letter-spacing: 0.04em;
 }
 .data-table__row:hover {
-  background: var(--row-hover, #1b2029);
+  background: var(--row-hover);
   cursor: pointer;
 }
 .data-table__empty {
-  color: var(--muted, #9aa4b2);
+  color: var(--muted);
   text-align: center;
   padding: 1.5rem;
 }

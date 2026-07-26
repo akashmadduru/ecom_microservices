@@ -53,9 +53,9 @@ function submit(): void {
   flex-direction: column;
   gap: 0.75rem;
   padding: 1.5rem;
-  border: 1px solid #2a2f3a;
+  border: 1px solid var(--border);
   border-radius: 0.75rem;
-  background: #12161d;
+  background: var(--surface);
 }
 .gate__title {
   margin: 0;
@@ -63,15 +63,15 @@ function submit(): void {
 }
 .gate__hint {
   margin: 0;
-  color: #9aa4b2;
+  color: var(--muted);
   font-size: 0.8rem;
   line-height: 1.4;
 }
 .gate__input {
   padding: 0.6rem 0.75rem;
   border-radius: 0.5rem;
-  border: 1px solid #2a2f3a;
-  background: #0b0e14;
+  border: 1px solid var(--border);
+  background: var(--bg);
   color: inherit;
   font: inherit;
 }
@@ -79,7 +79,7 @@ function submit(): void {
   padding: 0.6rem 0.75rem;
   border-radius: 0.5rem;
   border: none;
-  background: #2f81f7;
+  background: var(--accent);
   color: white;
   font-weight: 600;
   cursor: pointer;

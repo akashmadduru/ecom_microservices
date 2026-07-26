@@ -120,28 +120,28 @@ onBeforeUnmount(stop)
 .logs__num {
   width: 5rem;
   margin-left: 0.25rem;
-  background: #0b0e14;
+  background: var(--bg);
   color: inherit;
-  border: 1px solid #2a2f3a;
+  border: 1px solid var(--border);
   border-radius: 0.35rem;
   padding: 0.2rem 0.4rem;
 }
 .logs__status {
-  color: #9aa4b2;
+  color: var(--muted);
 }
 .logs__status--live {
-  color: #7ee787;
+  color: var(--success);
 }
 .logs__error {
-  color: #ff7b72;
+  color: var(--error);
   font-size: 0.8rem;
 }
 .logs__output {
   margin: 0;
   max-height: 28rem;
   overflow: auto;
-  background: #0b0e14;
-  border: 1px solid #2a2f3a;
+  background: var(--bg);
+  border: 1px solid var(--border);
   border-radius: 0.5rem;
   padding: 0.75rem;
   font-size: 0.78rem;

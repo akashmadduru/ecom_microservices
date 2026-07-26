@@ -1,0 +1,102 @@
+/*
+ * Shared layout primitives duplicated near-verbatim across pages/components
+ * before this file existed. Registered globally via nuxt.config.ts `css:`.
+ * Page/component `<style scoped>` blocks should only contain rules that are
+ * genuinely specific to that file — anything here is the single source of
+ * truth for these classes.
+ */
+
+.page-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+.page-head__actions {
+  display: flex;
+  gap: 0.5rem;
+}
+.page-head button {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: inherit;
+  border-radius: 0.4rem;
+  padding: 0.35rem 0.8rem;
+  cursor: pointer;
+}
+
+.detail {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr));
+  gap: 0.5rem 1.5rem;
+  margin: 0 0 1.5rem;
+}
+.detail div {
+  display: flex;
+  gap: 0.75rem;
+  border-bottom: 1px solid var(--border);
+  padding: 0.4rem 0;
+}
+.detail dt {
+  width: 6.5rem;
+  color: var(--muted);
+  flex: none;
+}
+.detail dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.block {
+  margin-bottom: 1.5rem;
+}
+.plain {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.82rem;
+}
+.muted {
+  color: var(--muted);
+}
+.small {
+  font-size: 0.78rem;
+}
+.error {
+  color: var(--error);
+}
+
+.actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.actions button {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: inherit;
+  border-radius: 0.4rem;
+  padding: 0.25rem 0.6rem;
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+.actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.actions__error {
+  color: var(--error);
+  font-size: 0.78rem;
+}
+
+/* DataTable: lets wide tables scroll horizontally on narrow viewports
+   instead of breaking page layout. */
+.data-table__scroll {
+  overflow-x: auto;
+}

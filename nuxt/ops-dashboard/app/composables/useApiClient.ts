@@ -1,6 +1,8 @@
 import type {
   ContainerDetail,
   ContainerSummary,
+  DockerfileDetail,
+  DockerfileSummary,
   HealthReport,
   ImageDetail,
   ImageSummary,
@@ -42,6 +44,10 @@ export function useApiClient() {
     // Phase 4: read-only image listing/inspect.
     listImages: () => get<{ images: ImageSummary[] }>('/api/images'),
     inspectImage: (id: string) => get<ImageDetail>(`/api/images/${encodeURIComponent(id)}`),
+    // Phase 6: read-only display of this monorepo's own fixed Dockerfile
+    // allowlist (never a filesystem glob — see server/runtime/dockerfile-registry.ts).
+    listDockerfiles: () => get<{ dockerfiles: DockerfileSummary[] }>('/api/dockerfiles'),
+    inspectDockerfile: (id: string) => get<DockerfileDetail>(`/api/dockerfiles/${encodeURIComponent(id)}`),
     /** Build the SSE URL for a container's logs (auth goes in the header, added by the consumer). */
     logsUrl: (id: string, opts: { tail: number; timestamps: boolean }) =>
       `/api/containers/${encodeURIComponent(id)}/logs?tail=${opts.tail}&timestamps=${opts.timestamps}`,

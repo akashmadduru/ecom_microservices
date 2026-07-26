@@ -1,4 +1,4 @@
-# Feature: Ops Dashboard — Phase 1 (Read-Only Docker Observability) + Phase 2 (Gated Mutations) + Phase 3 (Read-Only Kubernetes Backend) + Phase 4 (Image Listing/Inspect + Detail-View Gaps) + Phase 5 (Gated Image/Volume/Network Mutations)
+# Feature: Ops Dashboard — Phase 1 (Read-Only Docker Observability) + Phase 2 (Gated Mutations) + Phase 3 (Read-Only Kubernetes Backend) + Phase 4 (Image Listing/Inspect + Detail-View Gaps) + Phase 5 (Gated Image/Volume/Network Mutations) + Phase 6 (Read-Only Dockerfile Discovery)
 
 Last verified against: `nuxt/ops-dashboard/` as built (Nuxt 4.5 / Nitro / dockerode;
 this is a rename of the `vue/ops-dashboard/` path used in this file's Phase 1–3
@@ -20,7 +20,12 @@ resource-mutating-types,docker-resource-mutating-provider,resource-mutation-guar
 networks/[id]/remove,networks/prune,resource-mutations-config}.{post,get}.ts`,
 `app/composables/useApiClient.ts`, `app/components/{Image,Volume,Network}Actions.vue`,
 `app/pages/{images.vue,images/[id].vue,volumes.vue,volumes/[id].vue,networks.vue,
-networks/[id].vue}`, `docker-compose.ops.yml`, `.env.example`.
+networks/[id].vue}`, `docker-compose.ops.yml`, `.env.example`; and, for Phase 6,
+`server/runtime/{types,dockerfile-parse,dockerfile-registry}.ts`, `server/routes/api/
+dockerfiles/{index,[id]}.get.ts`, `scripts/snapshot-dockerfiles.mjs`, `nuxt.config.ts`,
+`app/composables/useApiClient.ts`, `app/pages/{dockerfiles.vue,dockerfiles/[id].vue,
+app.vue}`, `package.json`, `.gitignore`, `.github/workflows/ci-ops-dashboard.yml`,
+`README.md`.
 
 **Grounding:** Built. Everything described below is shipped code, not a proposal.
 Phase 2 (gated stop/start/restart) shipped on top of Phase 1's read-only foundation;
@@ -28,14 +33,18 @@ Phase 3 (a generic, read-only Kubernetes backend) shipped on top of both; Phase 
 (read-only image listing/inspect, plus the `/networks/:id` and `/volumes/:id` detail
 routes Phase 3's own FutureWork entry flagged as a natural follow-up) shipped on top
 of all three; Phase 5 (gated named-remove + prune for images/volumes/networks) shipped
-on top of all four. This file covers all five. Rebuild, exec, and any create/pull/push/
-connect capability remain explicitly **not** built for either backend — see
-[Phase 5](#phase-5-gated-imagevolumenetwork-mutations), Known Limitations, and
-[`FutureWork.md`](./FutureWork.md). **Phase 3 has never been run against a real
-Kubernetes cluster**, and this remains true of Phase 4's and Phase 5's Kubernetes-mode
-code too (Phase 5's mutations are Docker-only and reject kubernetes mode outright, but
-the underlying read-only inspect calls the guard relies on inherit the same unverified
-status) — see
+on top of all four; Phase 6 (read-only display of this monorepo's own 7 Dockerfiles)
+shipped on top of all five. This file covers all six. Rebuild, exec, and any
+create/pull/push/connect capability remain explicitly **not** built for either
+backend — see [Phase 5](#phase-5-gated-imagevolumenetwork-mutations), Known
+Limitations, and [`FutureWork.md`](./FutureWork.md). Phase 6 in particular ships
+NO build/rebuild capability of any kind — it only displays existing Dockerfile
+*content*, parsed, never executes anything it parses (see
+[Phase 6](#phase-6-read-only-dockerfile-discovery) below). **Phase 3 has never been
+run against a real Kubernetes cluster**, and this remains true of Phase 4's and
+Phase 5's Kubernetes-mode code too (Phase 5's mutations are Docker-only and reject
+kubernetes mode outright, but the underlying read-only inspect calls the guard relies
+on inherit the same unverified status) — see
 [Phase 3: Generic Read-Only Kubernetes Backend](#phase-3-generic-read-only-kubernetes-backend)
 below and [DecisionLog](./DecisionLog.md#phase-3-shipped-unverified-against-a-real-kubernetes-cluster)
 for why, and what "verified" will mean going forward.
@@ -44,7 +53,8 @@ Related docs: [`Changes.md`](./Changes.md) (file-level changelog),
 [`DecisionLog.md`](./DecisionLog.md) (rationale for the socket-proxy trust boundary,
 the Python→Node stack pivot, the Phase 2 two-proxy correction, the Phase 3
 unverified-against-a-real-cluster decision, the Phase 4 namespace-qualified-id
-correction, the Phase 5 Option-A residual-risk decision, and other structural calls),
+correction, the Phase 5 Option-A residual-risk decision, the Phase 6 CI-snapshot-vs-
+bind-mount decision, and other structural calls),
 [`FutureWork.md`](./FutureWork.md) (deferred items).
 
 ## Summary
@@ -570,16 +580,131 @@ container-mutate proxy are both untouched. Any future request to add pull/push/c
 connect needs its own fresh scoping/approval pass, exactly as this phase itself was
 Phase 4's own deferred item revisited with one.
 
+## Phase 6: Read-Only Dockerfile Discovery
+
+Phase 6 adds a fifth, small observability surface: a **read-only, display-only**
+view of this monorepo's own Dockerfiles — `/dockerfiles` (list) and
+`/dockerfiles/:id` (parsed detail + raw source). It is unrelated to the
+Docker-Engine-facing `RuntimeProvider` abstraction every earlier phase is built
+on (`server/runtime/docker-provider.ts`/`kubernetes-provider.ts`) — this phase
+reads Dockerfile *source text*, a build-time artifact, never anything from a
+live Docker Engine or Kubernetes API, so `types.ts`'s `RuntimeProvider`
+interface itself is untouched.
+
+### A fixed, hardcoded allowlist of exactly 7 Dockerfiles — never a filesystem glob
+
+`server/runtime/dockerfile-registry.ts` exposes exactly these 7, and only
+these 7, regardless of what else might exist on disk: this app's own
+(`nuxt/ops-dashboard/Dockerfile`, build context its own directory), the 4
+Python services' (`python/services/{api_gateway,auth_service,
+inventory_service,product_service}/Dockerfile`, build context the repo root),
+and the 2 Vue apps' (`vue/apps/{ecom-admin,ecom-web}/Dockerfile`, build
+context `vue/`). No request parameter is ever used to construct a filesystem
+path anywhere in this feature — an id that isn't one of the 7 fixed entries
+gets a 404, never a lookup against the real filesystem.
+
+### CI-time snapshot, not a runtime bind-mount — and why
+
+This dashboard has zero filesystem access to any monorepo-relative path at
+runtime today — a deliberate property of its
+[standalone, copy-out-able design](./DecisionLog.md#standalone-copy-outable-design):
+its own Dockerfile's `COPY . .` only ever brings in its own directory, and a
+`../../python/services/...`-shaped runtime read would both break that property
+and simply not exist inside the running container. So the other 6
+Dockerfiles' content is captured **once, ahead of time**, wherever the full
+monorepo checkout genuinely is present (CI's own checkout, or a developer's
+local clone) — `scripts/snapshot-dockerfiles.mjs` — rather than read live at
+request time. Full rationale, and the bind-mount alternative that was rejected
+instead: [DecisionLog](./DecisionLog.md#phase-6-ci-time-manifest-snapshot-not-a-runtime-bind-mount).
+
+The script writes `server/generated/dockerfile-manifest.json` (gitignored — a
+build artifact, regenerated fresh every time, never committed source)
+containing, per entry, `{ id, label, dockerfilePath, buildContext, rawContent
+}`. `server/runtime/dockerfile-parse.ts` is a pure function parsing that raw
+text into `stages` (base image + optional `AS <name>` alias per `FROM`),
+`exposedPorts`, `entrypoint`/`cmd` (exec-JSON or shell form, either way
+normalized to a single string), and `argNames`/`envNames` — **names only,
+never values**, mirroring this app's existing `ContainerDetail.envKeys`-only
+precedent (see [DecisionLog](./DecisionLog.md#env-keys-only-not-values)),
+even though the risk profile here is genuinely lower: a Dockerfile's `ARG`/
+`ENV` defaults are already-committed source in this repo, not a
+runtime-injected secret. Only the **final** build stage's `EXPOSE`/
+`ENTRYPOINT`/`CMD`/`ENV` are surfaced — everything in an earlier stage is
+build-time-only and doesn't describe the image that actually ships, mirroring
+how `docker inspect` itself only ever reports the final image's config.
+
+### Bundled as a Nitro server asset, not read via a runtime `fs` path
+
+The manifest is registered as a Nitro `serverAssets` entry (`nuxt.config.ts`,
+baseName `generated`, pointed at `server/generated/`) and read at runtime via
+`useStorage('assets:generated')` — the same bare-global-Nitro-import pattern
+`server/routes/api/**` already relies on for `defineEventHandler`/
+`getRouterParam`. This was a deliberate, verified choice, not an assumption: a
+plain runtime `fs.readFileSync()` call would NOT survive Nitro's production
+bundling (the bundler has no static visibility into an opaque runtime fs
+path), which was confirmed by actually building `.output/server` and
+inspecting it before finalizing this design — `serverAssets` correctly
+inlines the manifest's content into the compiled bundle at build time, and a
+missing/malformed manifest degrades to an empty list plus a console warning
+(never a crash), verified by actually running the built server both with and
+without the manifest present.
+
+### Local dev and CI wiring
+
+`npm run snapshot-dockerfiles` (`node scripts/snapshot-dockerfiles.mjs`) must
+be run before `npm run dev`/`npm run build` for the manifest to exist; the
+`prebuild` npm lifecycle hook runs it automatically for `npm run build`. The
+script resolves the repo root from **its own file location**
+(`import.meta.url`), not `process.cwd()`, so it behaves identically whether
+invoked as `node nuxt/ops-dashboard/scripts/snapshot-dockerfiles.mjs` from the
+repo root (CI) or as `npm run snapshot-dockerfiles` from within
+`nuxt/ops-dashboard/` (local dev). If the full monorepo isn't visible from
+where it runs (the narrowed Docker build context is the expected case) it
+leaves an already-correct, previously-generated manifest untouched rather than
+overwriting it with an inferior one; if no manifest exists yet either, it
+writes an empty-but-valid fallback with a warning, so a fresh clone never
+crashes the app — only shows an empty Dockerfiles list until the script is run
+for real.
+
+This also required a **prerequisite bug fix**, unrelated to this feature but
+blocking it: `.github/workflows/ci-ops-dashboard.yml` still referenced the
+stale `vue/ops-dashboard` path from before this app's rename to
+`nuxt/ops-dashboard` in its `paths:` filter, `working-directory`,
+`cache-dependency-path`, and Docker build `context:`/`file:` — meaning this
+workflow was not actually triggering on real changes to this app before this
+fix. The `docker` job also stopped calling the shared
+`_reusable-docker-build-push.yml` (used by 6 other services' CI) and instead
+runs its own inline checkout + snapshot step + `docker/build-push-action`
+sequence, so the snapshot script can run **before** the Docker build narrows
+its context to `nuxt/ops-dashboard/` alone — the same "own its own CI steps
+rather than force-fit a shared template" judgment call this workflow's
+`lint-test-build` job already made for install/lint/type-check/test/build.
+
+### Explicitly out of scope {#phase-6-explicitly-out-of-scope}
+
+No build, rebuild, or "launch a container from this Dockerfile" capability of
+any kind — this phase only displays already-committed Dockerfile *content*,
+parsed, and never executes or builds anything it parses. That is a
+deliberately separate, much larger, and separately-scoped system (tracked
+elsewhere, not part of this phase) — mirrors how Phase 2's rebuild was
+evaluated and explicitly ruled out for the exact same reason (build-context
+execution is a fundamentally larger trust boundary than anything else this
+app does). No new mutating route, no new socket-proxy toggle, no change to
+`docker-compose.ops.yml`.
+
 ## Impacted Files
 
 New project tree, `nuxt/ops-dashboard/` (see the README's "Project layout" section for
-the full annotated tree). Outside that directory: `.github/workflows/
-ci-ops-dashboard.yml` (new), `python/services/{api_gateway,auth_service,
-product_service,inventory_service}/Dockerfile` (`HEALTHCHECK` line added to each, no
-other changes); `k8s/ops-dashboard-readonly-rbac.yaml` (new, Phase 3 — guidance-only
-RBAC manifest, not consumed by any code; unchanged by Phase 4/5 — no Phase 5 code path
-touches Kubernetes, so the manifest needs no new grants). Full file-level table, all
-five phases: [`Changes.md`](./Changes.md).
+the full annotated tree, though note it was not kept in sync with Phase 4/5/6's
+additions — Changes.md's file-level table is the authoritative record). Outside that
+directory: `.github/workflows/ci-ops-dashboard.yml` (new in Phase 1, fixed in Phase 6
+— see [Phase 6](#phase-6-read-only-dockerfile-discovery)), `python/services/
+{api_gateway,auth_service,product_service,inventory_service}/Dockerfile`
+(`HEALTHCHECK` line added to each in Phase 1; read, never modified, by Phase 6's
+snapshot script); `k8s/ops-dashboard-readonly-rbac.yaml` (new, Phase 3 — guidance-only
+RBAC manifest, not consumed by any code; unchanged by Phase 4/5/6 — no Phase 5/6 code
+path touches Kubernetes, so the manifest needs no new grants). Full file-level table,
+all six phases: [`Changes.md`](./Changes.md).
 
 ## Configuration / Feature Flags
 
@@ -674,6 +799,11 @@ pre-Phase-5 behavior, plus one more idle proxy container in the batteries-includ
 
 Full detail and status in [`FutureWork.md`](./FutureWork.md):
 
+- **Phase 6's Dockerfile-discovery feature is repo-specific and NOT copy-out-able**,
+  the one documented exception to this project's standing standalone/copy-out-able
+  design goal — its 7-entry allowlist is hardcoded to this exact monorepo's paths. See
+  [Phase 6](#phase-6-read-only-dockerfile-discovery) and
+  [DecisionLog](./DecisionLog.md#phase-6-ci-time-manifest-snapshot-not-a-runtime-bind-mount).
 - **No container rebuild, remove, or exec capability.** Rebuild in particular was
   evaluated and explicitly ruled out (not just deferred) as the single highest-RCE-risk
   capability named in the original ask — it would require build-context/source access

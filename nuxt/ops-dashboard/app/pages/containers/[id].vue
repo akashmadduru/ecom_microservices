@@ -42,7 +42,7 @@ const { data, pending, error, refresh } = await useAsyncData(
         <div><dt>Restarts</dt><dd>{{ data.restartCount }}</dd></div>
         <div><dt>Service</dt><dd>{{ data.service ?? 'unmanaged' }}</dd></div>
         <div><dt>Project</dt><dd>{{ data.project ?? '—' }}</dd></div>
-        <div><dt>Created</dt><dd>{{ data.createdAt }}</dd></div>
+        <div><dt>Created</dt><dd>{{ formatDate(data.createdAt) }}</dd></div>
         <div><dt>Command</dt><dd class="mono">{{ data.command }}</dd></div>
         <div><dt>Networks</dt><dd>{{ data.networks.join(', ') || '—' }}</dd></div>
       </dl>
@@ -91,12 +91,6 @@ const { data, pending, error, refresh } = await useAsyncData(
 </template>
 
 <style scoped>
-.page-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 1rem;
-}
 .page-head h1 {
   margin: 0.25rem 0 0;
   font-size: 1.3rem;
@@ -105,14 +99,6 @@ const { data, pending, error, refresh } = await useAsyncData(
   margin: 0;
   font-size: 1.05rem;
 }
-.page-head button {
-  background: transparent;
-  border: 1px solid var(--border);
-  color: inherit;
-  border-radius: 0.4rem;
-  padding: 0.35rem 0.8rem;
-  cursor: pointer;
-}
 .back {
   color: var(--muted);
   font-size: 0.85rem;
@@ -120,52 +106,10 @@ const { data, pending, error, refresh } = await useAsyncData(
 .detail-actions {
   margin-bottom: 1.25rem;
 }
-.detail {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr));
-  gap: 0.5rem 1.5rem;
-  margin: 0 0 1.5rem;
-}
-.detail div {
-  display: flex;
-  gap: 0.75rem;
-  border-bottom: 1px solid var(--border);
-  padding: 0.4rem 0;
-}
-.detail dt {
-  width: 6.5rem;
-  color: var(--muted);
-  flex: none;
-}
-.detail dd {
-  margin: 0;
-  overflow-wrap: anywhere;
-}
 .block {
   margin-bottom: 1.5rem;
 }
 .block h2 {
   font-size: 1.05rem;
-}
-.plain {
-  list-style: none;
-  padding: 0;
-  margin: 0.5rem 0 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-}
-.mono {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.82rem;
-}
-.muted {
-  color: var(--muted);
-}
-.small {
-  font-size: 0.78rem;
-}
-.error {
-  color: #ff7b72;
 }
 </style>

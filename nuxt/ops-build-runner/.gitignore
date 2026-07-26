@@ -1,0 +1,9 @@
+# Standalone ignore file -- this project has its own package.json/lockfile
+# and is meant to build independently of the rest of the monorepo.
+node_modules
+dist
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store

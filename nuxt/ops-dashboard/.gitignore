@@ -9,3 +9,9 @@ dist
 !.env.example
 *.log
 .DS_Store
+
+# Phase 6: build-time artifact produced by scripts/snapshot-dockerfiles.mjs —
+# regenerated fresh each time (locally via `npm run snapshot-dockerfiles`/the
+# `prebuild` hook, in CI as its own step before the Docker build), never
+# committed source.
+server/generated

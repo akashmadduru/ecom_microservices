@@ -9,6 +9,7 @@ const navItems = [
   { to: '/images', label: 'Images' },
   { to: '/networks', label: 'Networks' },
   { to: '/volumes', label: 'Volumes' },
+  { to: '/dockerfiles', label: 'Dockerfiles' },
   { to: '/health', label: 'Health' },
 ]
 </script>
@@ -42,10 +43,17 @@ const navItems = [
 
 <style>
 :root {
-  color-scheme: dark;
-  --border: #2a2f3a;
-  --muted: #9aa4b2;
-  --row-hover: #1b2029;
+  color-scheme: light;
+  --bg: #ffffff;
+  --surface: #f6f8fa;
+  --border: #d8dee6;
+  --text: #1b1f24;
+  --muted: #5b6673;
+  --accent: #0969da;
+  --error: #cf222e;
+  --success: #1a7f37;
+  --warning: #9a6700;
+  --row-hover: #f0f3f6;
 }
 * {
   box-sizing: border-box;
@@ -57,8 +65,8 @@ body,
   min-height: 100vh;
 }
 body {
-  background: #0b0e14;
-  color: #e6edf3;
+  background: var(--bg);
+  color: var(--text);
   font-family:
     ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 }
@@ -75,7 +83,7 @@ a {
   gap: 1.5rem;
   padding: 0.75rem 1.5rem;
   border-bottom: 1px solid var(--border);
-  background: #12161d;
+  background: var(--surface);
 }
 .shell__brand {
   font-weight: 700;
@@ -91,8 +99,8 @@ a {
   border-bottom: 2px solid transparent;
 }
 .shell__link--active {
-  color: #e6edf3;
-  border-bottom-color: #2f81f7;
+  color: var(--text);
+  border-bottom-color: var(--accent);
 }
 .shell__signout {
   margin-left: auto;

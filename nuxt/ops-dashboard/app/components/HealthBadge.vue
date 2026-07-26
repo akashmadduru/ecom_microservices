@@ -31,20 +31,20 @@ const label = computed(() => {
   border: 1px solid transparent;
 }
 .badge--healthy {
-  color: #7ee787;
-  border-color: #2ea04326;
-  background: #2ea04322;
+  color: var(--success);
+  border-color: color-mix(in srgb, var(--success) 15%, transparent);
+  background: color-mix(in srgb, var(--success) 13%, transparent);
 }
 .badge--unhealthy {
-  color: #ff7b72;
-  background: #f8514922;
+  color: var(--error);
+  background: color-mix(in srgb, var(--error) 13%, transparent);
 }
 .badge--starting {
-  color: #e3b341;
-  background: #bb800922;
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 13%, transparent);
 }
 .badge--none {
-  color: #9aa4b2;
-  background: #6e768122;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--muted) 13%, transparent);
 }
 </style>

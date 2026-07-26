@@ -1,8 +1,49 @@
 # Future Work (ops-dashboard)
 
-Open items surfaced during the Phase 1 through Phase 5 builds, grouped by change set,
+Open items surfaced during the Phase 1 through Phase 6 builds, grouped by change set,
 most urgent first within each group. Related: [`Feature.md`](./Feature.md),
 [`Changes.md`](./Changes.md), [`DecisionLog.md`](./DecisionLog.md).
+
+---
+
+## Phase 6 build — read-only Dockerfile discovery
+
+Related: [`Feature.md`](./Feature.md#phase-6-read-only-dockerfile-discovery),
+[`Changes.md`](./Changes.md#change-set-phase-6-build--read-only-dockerfile-discovery--2026-07-25),
+[`DecisionLog.md`](./DecisionLog.md#phase-6-ci-time-manifest-snapshot-not-a-runtime-bind-mount).
+
+### Backlog Items Identified During This Task
+
+| Item | Category (Perf/Debt/Feature/Security/DX) | Priority | Rationale |
+|---|---|---|---|
+| The Dockerfile-discovery feature is the one part of this project that is NOT copy-out-able unchanged | Debt/DX | Medium (explicitly accepted and disclosed, not a silent gap) | The 7-entry allowlist and `scripts/snapshot-dockerfiles.mjs` hardcode monorepo-relative paths. Copying `ops-dashboard/` into another repo will leave every other page/route working, but this one feature will not work unmodified. Disclosed in the script's own doc comment, README.md, and DecisionLog — revisit only if this project's copy-out-able goal is ever prioritized above this feature's convenience. |
+| The manifest cache (`dockerfile-registry.ts`) is loaded once per process lifetime, not re-read if the manifest changes on disk while the server is running | Debt/DX | Low | Mirrors this app's existing lazy-singleton pattern (dockerode clients in `singleton.ts`), reasonable for a small tool restarted on every deploy whose manifest is itself a build-time artifact. A developer regenerating the manifest mid-`npm run dev` session would need to restart the dev server to see the change — not expected to be a real friction point in practice. |
+| No frontend/component tests for `dockerfiles.vue`/`dockerfiles/[id].vue` | Test/DX | Low | Consistent with the pre-existing, carried-forward Phase 1 gap ("no tests for the Nuxt SPA pages/components themselves") — the 197-test suite covers the new parser/registry logic exhaustively but not Vue component rendering, same as every prior phase's equivalent note. |
+| The fixed 7-Dockerfile allowlist requires a manual code change (both the snapshot script and, implicitly, nothing else) whenever a new service/Dockerfile is added to this monorepo | Feature/DX | Low (deliberate design, not a gap) | A real filesystem glob was explicitly rejected in favor of a fixed, hardcoded allowlist (see DecisionLog) — a new service's Dockerfile will not automatically appear in `/dockerfiles` until `scripts/snapshot-dockerfiles.mjs`'s `FIXED_ENTRIES` array is updated by hand. Accepted tradeoff for "never a filesystem glob," mirroring this project's general preference for explicit, reviewable allowlists over automatic discovery (e.g. `OPS_MANAGED_SERVICES`/`OPS_MANAGED_VOLUMES`/`OPS_MANAGED_NETWORKS`). |
+| CI's `paths:` trigger for `ci-ops-dashboard.yml` does not include the 6 other services' Dockerfile paths | DX | Low | Editing e.g. `python/services/api_gateway/Dockerfile` alone will not re-trigger this workflow, even though the resulting manifest snapshot (once regenerated) would differ — not treated as a correctness bug since the manifest is regenerated fresh on every real trigger of this workflow anyway (nothing stale ships), just a "the CI badge won't reflect that specific edit" DX gap. Not addressed this phase to keep the trigger-path change minimal and reviewable; candidate follow-up if this is ever reported as confusing. |
+
+### Deferred Technical Debt
+
+- **The copy-out-able exception is permanent, not temporary** — accepted at
+  design time, not an oversight to close later. See the backlog row above and
+  [DecisionLog](./DecisionLog.md#phase-6-ci-time-manifest-snapshot-not-a-runtime-bind-mount).
+- **The fixed 7-entry allowlist requires manual maintenance as this monorepo's
+  own service list changes** — deliberate (never a filesystem glob), not a gap.
+
+### Architecture Evolution Candidates
+
+- **A custom, verb-scoped mechanism for auto-discovering new services'
+  Dockerfiles** (e.g. a repo-wide convention/manifest file every service
+  maintains, that this snapshot script reads instead of a hardcoded array)
+  would remove the manual-maintenance cost above, at the cost of no longer
+  being a simple, fully-reviewable fixed allowlist. Not planned — the fixed
+  allowlist was a deliberate choice this phase made, not a placeholder for
+  this idea.
+- **Build/rebuild/launch capability from a displayed Dockerfile** — explicitly
+  out of scope for this phase and not an implicit next step; a separate, much
+  larger, separately-scoped system, mirroring how Phase 2's rebuild was
+  evaluated and explicitly ruled out for containers. See
+  [Explicitly out of scope](./Feature.md#phase-6-explicitly-out-of-scope).
 
 ---
 

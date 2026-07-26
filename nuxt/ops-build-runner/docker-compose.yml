@@ -1,0 +1,87 @@
+# Run recipe for ops-build-runner -- a standalone, self-contained compose file
+# (mirrors nuxt/ops-dashboard/docker-compose.ops.yml's own "colocated with the
+# project it belongs to" convention), NOT part of the platform's root
+# docker-compose.yml.
+#
+#   BUILD_RUNNER_TOKEN=$(openssl rand -hex 32) docker compose up --build
+#
+# Security posture (see docs/apps/ops-build-runner/DecisionLog.md for the
+# full rationale, including the two explicitly-accepted residual risks):
+#   - build-runner-db is a DEDICATED Postgres instance for this service only
+#     -- NOT the platform's ecom_network Postgres. Logically separate, per
+#     the approved architecture.
+#   - Both services sit on a NEW, dedicated `ops_build_network`. This compose
+#     file does not reference `ecom_network` or `ops_network` (nuxt/
+#     ops-dashboard's network) AT ALL -- that absence IS the isolation
+#     boundary at the network level.
+#   - IMPORTANT, stated plainly (not silently presented as fully solved):
+#     this is NETWORK-LEVEL segmentation ONLY, for local dev / this initial
+#     pass. It is explicitly NOT the full dedicated-host/VM isolation the
+#     approved architecture calls for as the complete solution for a service
+#     that (in a later phase) will execute `docker build`/`docker run` on
+#     behalf of an approved request. That gap is knowingly accepted for now
+#     -- see DecisionLog.md.
+#   - The API port is not published to the host by default; uncomment the
+#     `ports:` block below only for local development convenience, and never
+#     publish anything other than 127.0.0.1 (loopback).
+
+name: ops-build-runner
+
+services:
+  build-runner-db:
+    # Dedicated instance for this service ONLY -- never shared with the
+    # platform's ecom_network postgres or any other service's database.
+    image: postgres:17-alpine
+    container_name: ops-build-runner-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: build_runner
+    volumes:
+      - build_runner_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - ops_build_network
+    # Not published to the host: only build-runner-api (same network) talks
+    # to it, plus whatever runs `npm run migrate` from inside this network.
+
+  build-runner-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ops-build-runner-api
+    restart: unless-stopped
+    depends_on:
+      build-runner-db:
+        condition: service_healthy
+    environment:
+      # REQUIRED -- no default; the API fails closed (503) if this is unset.
+      BUILD_RUNNER_TOKEN: ${BUILD_RUNNER_TOKEN:?set BUILD_RUNNER_TOKEN in the environment or a .env file}
+      DATABASE_URL: postgres://build_runner_app:${BUILD_RUNNER_APP_DB_PASSWORD:?set BUILD_RUNNER_APP_DB_PASSWORD}@build-runner-db:5432/build_runner
+      # Deliberately NOT defaulted to "console" -- see .env.example's comment.
+      APPROVAL_NOTIFIER: ${APPROVAL_NOTIFIER:-slack}
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
+      APPROVAL_CODE_TTL_MINUTES: ${APPROVAL_CODE_TTL_MINUTES:-15}
+      PORT: "4100"
+    # ports:
+    #   # Uncomment for local development ONLY. Loopback-only, exactly like
+    #   # ops-dashboard's own published port -- never 0.0.0.0.
+    #   - "127.0.0.1:4100:4100"
+    networks:
+      - ops_build_network
+
+networks:
+  # Dedicated, isolated bridge. Deliberately NOT ecom_network or ops_network
+  # -- see this file's header comment: that absence is the isolation
+  # boundary, network-level only, not a substitute for the full host/VM
+  # isolation the approved architecture calls for.
+  ops_build_network:
+    driver: bridge
+
+volumes:
+  build_runner_postgres_data:

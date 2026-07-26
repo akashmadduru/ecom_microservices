@@ -1,0 +1,31 @@
+{
+  "name": "ops-build-runner",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Standalone build+launch approval-gated API for nuxt/ops-dashboard's high-risk build feature. A fourth, structurally separate subsystem from ops-dashboard's existing Docker-socket-proxies -- see docs/apps/ops-build-runner/DecisionLog.md. Phase 1: scaffold, data model, allowlist, approval state machine, REST API. Phase 2: real `docker build`/`docker run` execution against an isolated, rootless-DinD daemon, the real GitAncestorGuard, and TTL-based auto-teardown.",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "migrate": "tsx src/migrate.ts",
+    "migrate:build": "node dist/migrate.js",
+    "lint": "eslint .",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "dockerode": "^5.0.1",
+    "pg": "^8.22.0"
+  },
+  "devDependencies": {
+    "@types/dockerode": "^4.0.1",
+    "@types/node": "^24.13.2",
+    "@types/pg": "^8.20.0",
+    "eslint": "^9.18.0",
+    "tsx": "^4.23.1",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.20.0",
+    "vitest": "^4.1.10"
+  }
+}

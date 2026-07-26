@@ -59,7 +59,10 @@ const { pruning, pruneError, run: pruneUnused } = usePruneAction({
       empty-text="No volumes found."
       @select="openDetail"
     >
-      <template #cell-createdAt="{ row }">{{ row.createdAt ?? '—' }}</template>
+      <template #cell-mountpoint="{ row }">
+        <TextPopover :text="row.mountpoint" />
+      </template>
+      <template #cell-createdAt="{ row }">{{ formatDate(row.createdAt) }}</template>
       <template #cell-actions="{ row }">
         <VolumeActions :id="row.id" :name="row.name" @done="refresh()" />
       </template>
@@ -68,29 +71,8 @@ const { pruning, pruneError, run: pruneUnused } = usePruneAction({
 </template>
 
 <style scoped>
-.page-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 1rem;
-}
 .page-head h1 {
   margin: 0;
   font-size: 1.3rem;
-}
-.page-head__actions {
-  display: flex;
-  gap: 0.5rem;
-}
-.page-head button {
-  background: transparent;
-  border: 1px solid var(--border);
-  color: inherit;
-  border-radius: 0.4rem;
-  padding: 0.35rem 0.8rem;
-  cursor: pointer;
-}
-.error {
-  color: #ff7b72;
 }
 </style>

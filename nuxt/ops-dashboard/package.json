@@ -6,6 +6,7 @@
   "description": "Standalone, read-only observability dashboard for local Docker containers. Talks to the Docker Engine API only via a read-only socket proxy.",
   "scripts": {
     "build": "nuxt build",
+    "prebuild": "npm run snapshot-dockerfiles",
     "dev": "nuxt dev",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
@@ -13,7 +14,8 @@
     "start": "node .output/server/index.mjs",
     "lint": "eslint .",
     "type-check": "nuxt typecheck",
-    "test": "vitest run"
+    "test": "vitest run",
+    "snapshot-dockerfiles": "node scripts/snapshot-dockerfiles.mjs"
   },
   "dependencies": {
     "@kubernetes/client-node": "^1.4.0",

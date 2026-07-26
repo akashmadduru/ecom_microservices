@@ -77,27 +77,3 @@ async function run(action: Action): Promise<void> {
   </div>
 </template>
 
-<style scoped>
-.actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-.actions button {
-  background: transparent;
-  border: 1px solid var(--border);
-  color: inherit;
-  border-radius: 0.4rem;
-  padding: 0.25rem 0.6rem;
-  cursor: pointer;
-  font-size: 0.8rem;
-}
-.actions button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-.actions__error {
-  color: #ff7b72;
-  font-size: 0.78rem;
-}
-</style>

@@ -9,6 +9,127 @@ Audience: engineering. Related: [`Feature.md`](./Feature.md),
 
 ---
 
+## 2026-07-25 — Phase 6 Dockerfile discovery: CI-time manifest snapshot, not a runtime bind-mount {#phase-6-ci-time-manifest-snapshot-not-a-runtime-bind-mount}
+
+**Context.** Phase 6 build ([`Feature.md`](./Feature.md#phase-6-read-only-dockerfile-discovery),
+[`Changes.md`](./Changes.md#change-set-phase-6-build--read-only-dockerfile-discovery--2026-07-25)).
+The ask was read-only display of this monorepo's own 7 Dockerfiles (this app's own,
+the 4 Python services', the 2 Vue apps') inside the dashboard. All 6 of the other
+Dockerfiles live outside `nuxt/ops-dashboard/`'s own directory tree, so some
+mechanism was needed to get their content into a process whose own Dockerfile only
+ever `COPY`s its own directory.
+
+**Decision.** Read the 7 fixed Dockerfiles **once, ahead of time**, wherever the full
+monorepo checkout is genuinely present (a developer's local clone, or a CI job with a
+full `actions/checkout`) — `scripts/snapshot-dockerfiles.mjs`, run from the repo
+root — and write their content into a manifest,
+`nuxt/ops-dashboard/server/generated/dockerfile-manifest.json`, gitignored and
+regenerated fresh every time, never committed. `server/runtime/dockerfile-registry.ts`
+reads this manifest at runtime (via a Nitro `serverAssets` bundle, not a raw `fs` call
+— see the "verified, not assumed" note below) and exposes exactly the 7 entries it
+contains; there is no filesystem glob anywhere in this feature, and no request
+parameter is ever used to construct a filesystem path.
+
+**Why not a runtime bind-mount instead.** The obvious-looking alternative — mount the
+repo root (or the 6 other services' directories) into the running container and read
+the Dockerfiles live via `fs.readFileSync('../../python/services/.../Dockerfile')` —
+was verified against this app's own `docker-compose.ops.yml` before being rejected:
+**no volume mounts of any source-code path exist anywhere in that file today**, and
+that absence is itself a deliberate design property of this project (see
+[standalone, copy-out-able design](#standalone-copy-outable-design) above), not an
+oversight this phase should quietly reverse. A bind-mount using
+`../../python/services/...`-shaped host-relative paths would:
+
+1. **Break the "copy this project out of the monorepo" claim outright** — those paths
+   are only valid *inside this specific repo's* directory layout; a bind-mount config
+   baked into `docker-compose.ops.yml` would silently reference nonexistent host paths
+   the moment `ops-dashboard/` is copied elsewhere.
+2. **Reintroduce host filesystem access this project has never had**, for a
+   read-only-display feature that doesn't need it live — every prior phase's Docker
+   access already goes through a socket-proxy specifically to avoid host-root-adjacent
+   access (see [socket-proxy decision](#docker-socket-proxy-not-a-direct-socket-mount)
+   above); a bind-mount of arbitrary host source directories is a materially different,
+   broader grant than anything else this app does, for a feature that is pure
+   already-committed-source display.
+3. **Not actually work in the shipped, deployed container anyway** — the production
+   image (built from `nuxt/ops-dashboard/Dockerfile`, `COPY . .` scoped to its own
+   directory) never contains the other 6 services' files, mount or no mount, unless
+   the *host* also happens to have this exact monorepo checked out at a predictable
+   relative path — an assumption that doesn't hold for a "batteries-included" `docker
+   compose -f docker-compose.ops.yml up` deployment on an arbitrary host.
+
+A build-time snapshot avoids all three: it runs somewhere the full repo is guaranteed
+to be present (CI's own checkout, or a developer's clone), produces a plain, portable
+JSON artifact, and the running container/app only ever needs to read that one
+self-contained file — no host path assumption survives into the deployed artifact.
+
+**The one honest, accepted exception to "standalone, copy-out-able."** Unlike every
+other design decision in this project, this one **does** reintroduce a
+monorepo-relative assumption: `scripts/snapshot-dockerfiles.mjs` hardcodes paths like
+`python/services/api_gateway/Dockerfile` and assumes it lives at
+`nuxt/ops-dashboard/scripts/` within this specific repo. If `ops-dashboard/` is ever
+copied into another repo, this one feature (and only this one) will not work
+unmodified. This is disclosed explicitly — in the script's own doc comment, in
+`README.md`'s top-of-file "standalone" claim (now stating the exception rather than
+silently contradicting it), and here — rather than glossed over. Every other page/
+route in this app remains fully copy-out-able.
+
+**Why the snapshot step lives in a separate CI step, not inside the Docker build.**
+`ci-ops-dashboard.yml`'s Docker build step narrows its `context:` to
+`nuxt/ops-dashboard/` alone, identical to every other service's CI — the build
+context tarball Docker receives never contains the other 6 services' files, mount or
+no mount, so running the snapshot script *inside* the Docker build (e.g. as a `RUN`
+step) cannot work: there would be nothing for it to read. The script instead runs as
+its own step in the `docker` job, against that job's own full `actions/checkout`
+(always the whole repo), strictly **before** the Docker build step — by the time
+`docker build` narrows to `nuxt/ops-dashboard/`, the manifest file already exists on
+disk inside it, and gets picked up by the Dockerfile's ordinary `COPY . .` like any
+other project file.
+
+**Bundled as a Nitro server asset, verified, not assumed.** A plain runtime
+`fs.readFileSync()` call against a computed path would not survive Nitro's production
+bundling — the bundler has no static visibility into an opaque runtime `fs` path, so
+nothing would copy `server/generated/dockerfile-manifest.json` into `.output/server`.
+This was confirmed empirically (not assumed) by actually running `npm run build` and
+inspecting the resulting `.output/server` tree before finalizing the design: with a
+plain `fs` read, no equivalent of the manifest's content appears anywhere in the
+bundle. `nuxt.config.ts`'s `nitro.serverAssets` (`baseName: 'generated'`, `dir:
+'./generated'`) is Nitro's own supported mechanism for bundling exactly this kind of
+build-time data file — reading it back via `useStorage('assets:generated')` was then
+verified end-to-end: built the app, started `node .output/server/index.mjs`, and
+curled `/api/dockerfiles`/`/api/dockerfiles/:id` against the real production bundle
+(confirmed correct output), then repeated the same build+start+curl cycle with the
+manifest deliberately absent (confirmed an empty list and a warning, not a crash).
+
+**Alternatives rejected.**
+*Runtime bind-mount of the repo root or the 6 other services' directories* — rejected,
+see above (breaks copy-out-ability, reintroduces broader host access than any other
+phase, and doesn't survive the deployed container's own narrowed Dockerfile anyway).
+*Commit the manifest as real source, regenerated by hand/pre-commit hook* — rejected:
+a generated, derived artifact checked into version control invites drift (the
+manifest silently going stale relative to the real Dockerfiles between commits) with
+no build-time guarantee of freshness; a gitignored, always-regenerated build artifact
+has no such staleness risk.
+*Run the snapshot script inside the Docker build stage itself* — rejected, see above:
+the build context is narrowed before the build ever starts, so there is nothing for a
+`RUN`-step version of the script to read.
+
+**Consequences.** One more moving part versus a hypothetical "just read the files"
+design that doesn't actually work here: a script that must run before `dev`/`build`,
+and a CI step ordered before the Docker build. Mitigated by the registry module's own
+graceful empty-list fallback (never a hard failure) and by wiring the script into the
+`prebuild` npm lifecycle hook so the common case (`npm run build`) needs no extra
+manual step. The standalone/copy-out-able design goal now has one explicit, disclosed
+exception instead of zero — judged an acceptable, honestly-documented cost for a
+read-only convenience feature, not a silent regression of that goal.
+
+**Revisit when.** If this feature is ever asked to support "any Dockerfile in the
+repo" generically (a real filesystem glob) rather than a fixed 7 — that would be a
+materially different, broader capability needing its own scoping pass (the fixed
+allowlist here is deliberate, not a placeholder for a future glob).
+
+---
+
 ## 2026-07-25 — Phase 5 resource mutations: named remove (Option A) accepted with app-layer narrowing, on a THIRD, isolated proxy {#phase-5-resource-mutations-option-a-app-layer-narrowing-third-proxy}
 
 **Context.** Phase 5 build ([`Feature.md`](./Feature.md#phase-5-gated-imagevolumenetwork-mutations),

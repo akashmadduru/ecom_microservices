@@ -6,6 +6,123 @@ recent first. Related: [`Feature.md`](./Feature.md), [`DecisionLog.md`](./Decisi
 
 ---
 
+## Change set: Phase 6 build — read-only Dockerfile discovery — 2026-07-25
+
+Built on top of Phase 1 + Phase 2 + Phase 3 + Phase 4 + Phase 5
+([`Changes.md`](#change-set-phase-5-build--gated-imagevolumenetwork-mutations-named-remove--prune--2026-07-25)).
+Related decisions: [`DecisionLog.md`](./DecisionLog.md#phase-6-ci-time-manifest-snapshot-not-a-runtime-bind-mount).
+
+### Summary
+
+Adds a fifth, **read-only, display-only** observability surface: `/dockerfiles`
+(list) and `/dockerfiles/:id` (parsed detail + raw source) for a **fixed,
+hardcoded allowlist of exactly 7 Dockerfiles** in this monorepo (this app's own,
+the 4 Python services', the 2 Vue apps') — never a filesystem glob. No build,
+rebuild, or execute capability of any kind; this phase only parses and displays
+already-committed Dockerfile *content*.
+
+Because 6 of the 7 Dockerfiles live outside `nuxt/ops-dashboard/`'s own
+directory tree, and this app has zero runtime filesystem access to any
+monorepo-relative path (a deliberate, pre-existing design property — see
+DecisionLog), their content is captured **once, ahead of time** by a new script,
+`scripts/snapshot-dockerfiles.mjs`, into a gitignored, regenerated-fresh-every-time
+manifest (`server/generated/dockerfile-manifest.json`) — never a runtime
+bind-mount, and never committed as source. The manifest is bundled into the
+production build as a Nitro `serverAssets` entry and read at runtime via
+`useStorage('assets:generated')`; a missing/malformed manifest degrades to an
+empty list plus a console warning, never a crash — verified by actually
+building and running the app both with and without the manifest present, not
+merely assumed to work.
+
+Also fixes a **prerequisite bug** found during planning, unrelated to this
+feature but blocking it: `.github/workflows/ci-ops-dashboard.yml` still
+referenced the stale `vue/ops-dashboard` path from before this app's rename —
+meaning it was not actually triggering on real changes to this app before this
+fix.
+
+### Files changed
+
+- `nuxt/ops-dashboard/scripts/snapshot-dockerfiles.mjs` — **new.** Reads the 7
+  fixed Dockerfile paths (repo-root-relative) and writes the manifest. Resolves
+  the repo root from its own file location (`import.meta.url`), not
+  `process.cwd()`, so it behaves identically whether invoked from the repo root
+  (CI) or from within `nuxt/ops-dashboard/` (`npm run snapshot-dockerfiles`,
+  local dev). Leaves an already-correct manifest untouched (rather than
+  overwriting it with an inferior one) when the full monorepo isn't visible
+  from where it runs — the expected case inside the narrowed Docker build
+  context; writes an empty-but-valid fallback manifest with a warning only if
+  no manifest exists yet either.
+- `nuxt/ops-dashboard/server/runtime/dockerfile-parse.ts` — **new.** Pure
+  function: raw Dockerfile text -> `stages`/`exposedPorts`/`entrypoint`/`cmd`/
+  `argNames`/`envNames`/`rawContent`. Only the final build stage's `EXPOSE`/
+  `ENTRYPOINT`/`CMD`/`ENV` are surfaced; `ARG`/`ENV` are names only, never
+  values.
+- `nuxt/ops-dashboard/server/runtime/dockerfile-registry.ts` — **new.** Loads
+  and caches the bundled manifest (via the `useStorage` bare-global Nitro
+  pattern, matching `server/routes/api/**`'s existing convention rather than
+  importing `nitropack/runtime` directly, which would pull in a Nitro-internal
+  virtual module specifier unresolvable under plain vitest); exposes
+  `listDockerfiles()`/`findDockerfile(id)`. The only allowlist this feature has
+  — no route or caller ever passes through a raw filesystem path.
+- `nuxt/ops-dashboard/server/runtime/types.ts` — **updated.** New
+  `DockerfileStage`/`DockerfileSummary`/`DockerfileDetail` types.
+  `RuntimeProvider` itself is untouched — this feature is unrelated to the
+  Docker-Engine/Kubernetes-facing abstraction every earlier phase is built on.
+- `nuxt/ops-dashboard/server/routes/api/dockerfiles/index.get.ts`,
+  `[id].get.ts` — **new.** Mirror `images/{index,[id]}.get.ts`'s exact
+  structure; `[id].get.ts` reuses the existing `assertValidResourceId` (same
+  hyphenated-slug charset), 404 for an unknown id.
+- `nuxt/ops-dashboard/nuxt.config.ts` — **updated.** New `nitro.serverAssets`
+  entry (`baseName: 'generated'`, `dir: './generated'`) bundling
+  `server/generated/**` into the production build.
+- `nuxt/ops-dashboard/app/composables/useApiClient.ts` — **updated.** Added
+  `listDockerfiles()`/`inspectDockerfile(id)`, identical `get<T>()` pattern to
+  every existing method.
+- `nuxt/ops-dashboard/app/pages/dockerfiles.vue`, `dockerfiles/[id].vue` —
+  **new.** List/detail pages mirroring `images.vue`/`images/[id].vue`'s shape;
+  detail page uses the existing `TextPopover.vue` for the raw-source toggle
+  (collapsed/truncated by default, full text on click/focus) rather than
+  dumping raw text inline uncollapsed.
+- `nuxt/ops-dashboard/app/app.vue` — **updated.** New "Dockerfiles" nav entry.
+- `nuxt/ops-dashboard/package.json` — **updated.** New `snapshot-dockerfiles`
+  script and a `prebuild` hook wired to it.
+- `nuxt/ops-dashboard/.gitignore` — **updated.** `server/generated` added.
+- `.github/workflows/ci-ops-dashboard.yml` — **updated.** Fixed the stale
+  `vue/ops-dashboard` path throughout (`paths:`, `working-directory`,
+  `cache-dependency-path`, Docker build `context:`/`file:`); `docker` job no
+  longer calls the shared `_reusable-docker-build-push.yml` and instead runs
+  its own inline checkout + snapshot step + `docker/build-push-action`
+  sequence, so the snapshot script runs against a full checkout **before** the
+  Docker build narrows its context to `nuxt/ops-dashboard/` alone.
+- `nuxt/ops-dashboard/README.md` — **updated.** New "Phase 6: Dockerfile
+  discovery" section; the standalone/copy-out-able claim near the top now
+  states this one documented exception rather than silently contradicting it.
+- `nuxt/ops-dashboard/test/{dockerfile-parse,dockerfile-registry}.test.ts` —
+  **new.** Pure-parser coverage grounded in this repo's own real Dockerfile
+  content (multi-stage, `HEALTHCHECK`-with-continuation, ENTRYPOINT-less/
+  ENTRYPOINT-present cases, nginx-based unnamed final stage) plus edge cases
+  (empty input, legacy `ENV` form, non-JSON `CMD`); registry coverage for the
+  happy path, unknown-id lookup, and both missing/malformed-manifest fallback
+  paths (stubbing the `useStorage` Nitro global, mirroring
+  `mutation-route.test.ts`/`logs-route.test.ts`'s established pattern rather
+  than importing the real Nitro runtime module). Test suite grew from 185 (end
+  of Phase 5) to 197, all passing.
+
+### Breaking Changes
+
+None. This is an additive, read-only feature with no new env var and no change
+to any existing route's response shape. `RuntimeProvider`, `mutation-guard.ts`,
+`resource-mutation-guard.ts`, and every existing socket-proxy instance are
+completely untouched.
+
+### Migration Steps Required
+
+Run `npm run snapshot-dockerfiles` once from the repo root (or let `npm run
+build`'s `prebuild` hook do it) before the Dockerfiles view will show real
+data; a fresh clone that hasn't run it yet shows an empty list, not an error.
+
+---
+
 ## Change set: Phase 5 build — gated image/volume/network mutations (named remove + prune) — 2026-07-25
 
 Built on top of Phase 1 + Phase 2 + Phase 3 + Phase 4

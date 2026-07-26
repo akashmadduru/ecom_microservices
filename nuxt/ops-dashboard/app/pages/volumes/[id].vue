@@ -31,13 +31,15 @@ const { data, pending, error, refresh } = await useAsyncData(
         <div><dt>Driver</dt><dd>{{ data.driver }}</dd></div>
         <div><dt>Scope</dt><dd>{{ data.scope }}</dd></div>
         <div><dt>Mountpoint</dt><dd class="mono">{{ data.mountpoint || '—' }}</dd></div>
-        <div><dt>Created</dt><dd>{{ data.createdAt ?? '—' }}</dd></div>
+        <div><dt>Created</dt><dd>{{ formatDate(data.createdAt) }}</dd></div>
       </dl>
 
       <section class="block">
         <h2>Labels</h2>
         <ul v-if="Object.keys(data.labels).length" class="plain">
-          <li v-for="(value, key) in data.labels" :key="key" class="mono">{{ key }}={{ value }}</li>
+          <li v-for="(value, key) in data.labels" :key="key" class="mono">
+            <TextPopover :text="`${key}=${value}`" />
+          </li>
         </ul>
         <p v-else class="muted">None.</p>
       </section>
@@ -45,7 +47,9 @@ const { data, pending, error, refresh } = await useAsyncData(
       <section class="block">
         <h2>Options</h2>
         <ul v-if="Object.keys(data.options).length" class="plain">
-          <li v-for="(value, key) in data.options" :key="key" class="mono">{{ key }}={{ value }}</li>
+          <li v-for="(value, key) in data.options" :key="key" class="mono">
+            <TextPopover :text="`${key}=${value}`" />
+          </li>
         </ul>
         <p v-else class="muted">None.</p>
       </section>
@@ -56,7 +60,9 @@ const { data, pending, error, refresh } = await useAsyncData(
           Not available in this runtime mode (a PersistentVolumeClaim has no equivalent free-form status map).
         </p>
         <ul v-else-if="Object.keys(data.status).length" class="plain">
-          <li v-for="(value, key) in data.status" :key="key" class="mono">{{ key }}={{ value }}</li>
+          <li v-for="(value, key) in data.status" :key="key" class="mono">
+            <TextPopover :text="`${key}=${value}`" />
+          </li>
         </ul>
         <p v-else class="muted">None.</p>
       </section>
@@ -65,12 +71,6 @@ const { data, pending, error, refresh } = await useAsyncData(
 </template>
 
 <style scoped>
-.page-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 1rem;
-}
 .page-head h1 {
   margin: 0.25rem 0 0;
   font-size: 1.3rem;
@@ -80,68 +80,16 @@ const { data, pending, error, refresh } = await useAsyncData(
   font-size: 1.05rem;
 }
 .page-head__actions {
-  display: flex;
   align-items: center;
-  gap: 0.5rem;
-}
-.page-head button {
-  background: transparent;
-  border: 1px solid var(--border);
-  color: inherit;
-  border-radius: 0.4rem;
-  padding: 0.35rem 0.8rem;
-  cursor: pointer;
 }
 .back {
   color: var(--muted);
   font-size: 0.85rem;
-}
-.detail {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr));
-  gap: 0.5rem 1.5rem;
-  margin: 0 0 1.5rem;
-}
-.detail div {
-  display: flex;
-  gap: 0.75rem;
-  border-bottom: 1px solid var(--border);
-  padding: 0.4rem 0;
-}
-.detail dt {
-  width: 6.5rem;
-  color: var(--muted);
-  flex: none;
-}
-.detail dd {
-  margin: 0;
-  overflow-wrap: anywhere;
 }
 .block {
   margin-bottom: 1.5rem;
 }
 .block h2 {
   font-size: 1.05rem;
-}
-.plain {
-  list-style: none;
-  padding: 0;
-  margin: 0.5rem 0 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-}
-.mono {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.82rem;
-}
-.muted {
-  color: var(--muted);
-}
-.small {
-  font-size: 0.78rem;
-}
-.error {
-  color: #ff7b72;
 }
 </style>

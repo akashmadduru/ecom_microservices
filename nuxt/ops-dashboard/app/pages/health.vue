@@ -51,30 +51,16 @@ const serviceColumns = [
 </template>
 
 <style scoped>
-.page-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 1rem;
-}
 .page-head h1 {
   margin: 0;
   font-size: 1.3rem;
 }
-.page-head button {
-  background: transparent;
-  border: 1px solid var(--border);
-  color: inherit;
-  border-radius: 0.4rem;
-  padding: 0.35rem 0.8rem;
-  cursor: pointer;
-}
 .engine {
-  color: #7ee787;
+  color: var(--success);
   font-size: 0.9rem;
 }
 .engine--down {
-  color: #ff7b72;
+  color: var(--error);
 }
 .cards {
   display: grid;
@@ -91,17 +77,14 @@ const serviceColumns = [
   gap: 0.25rem;
   color: var(--muted);
   font-size: 0.8rem;
-  background: #12161d;
+  background: var(--surface);
 }
 .card__n {
   font-size: 1.6rem;
-  color: #e6edf3;
+  color: var(--text);
   font-weight: 700;
 }
 h2 {
   font-size: 1.05rem;
-}
-.error {
-  color: #ff7b72;
 }
 </style>

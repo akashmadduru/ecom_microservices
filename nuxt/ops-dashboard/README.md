@@ -18,7 +18,18 @@ deletion, deployment scaling, or exec, and the Phase 2 mutation routes return
 
 It is deliberately self-contained: its own `package.json` / `package-lock.json`
 / `node_modules`, no dependency on the surrounding monorepo. You can copy the
-`ops-dashboard/` directory into any other repo and it still works unchanged.
+`ops-dashboard/` directory into any other repo and it still works unchanged —
+with **one honest exception**: Phase 6's read-only Dockerfile-discovery
+feature (`/dockerfiles`) is repo-specific by design, hardcoded to this exact
+monorepo's own 7 Dockerfiles (see "Phase 6: Dockerfile discovery" below). If
+you copy this project into another repo, that one feature won't work
+unmodified — every other page/route is unaffected.
+
+Phase 6 adds a small, **read-only** view of this monorepo's own Dockerfiles
+(this app's own, the 4 Python services', and the 2 Vue apps') — parsed stages,
+base images, exposed ports, entrypoint/cmd, and arg/env variable **names**
+(never values), plus a raw-source toggle. See "Phase 6: Dockerfile discovery"
+below for the fixed allowlist, the CI-snapshot mechanism, and local-dev setup.
 
 ## Why it talks to a socket proxy, never to the Docker socket
 
@@ -207,6 +218,46 @@ OPS_API_TOKEN=$(openssl rand -hex 32) \
 
 The bearer-token auth (`OPS_API_TOKEN`), the same `/api/*` surface, and the same
 frontend all work unchanged — only the backend provider is swapped.
+
+## Phase 6: Dockerfile discovery (read-only, repo-specific)
+
+`/dockerfiles` lists a **fixed, hardcoded allowlist of 7 Dockerfiles** in this
+monorepo — this app's own, the 4 Python services' (`api_gateway`,
+`auth_service`, `inventory_service`, `product_service`), and the 2 Vue apps'
+(`ecom-admin`, `ecom-web`) — showing each one's parsed build stages, base
+images, exposed ports, entrypoint/cmd, and `ARG`/`ENV` variable **names only**
+(never values, matching this app's existing container-detail precedent), plus
+a raw-source toggle. Read-only, display-only: there is no build/rebuild
+capability here at all — see the Bucket B ("build+launch") work this
+deliberately does not include.
+
+**This is the one part of this project that is NOT copy-out-able unchanged**
+(see the caveat at the top of this README): the allowlist is hardcoded to
+these exact 7 monorepo-relative paths, never a filesystem glob, so it only
+makes sense inside this specific repo.
+
+**Why a pre-built manifest, not a runtime read:** this app has zero filesystem
+access to any monorepo-relative path at runtime (a deliberate property of the
+standalone design above) — its own Dockerfile only ever `COPY`s its own
+directory, so `../../python/services/...`-shaped paths wouldn't exist inside
+the running container even if the code tried to read them. Instead,
+`scripts/snapshot-dockerfiles.mjs` reads the 7 fixed Dockerfiles **once, ahead
+of time, from the full monorepo checkout**, and writes a manifest to
+`server/generated/dockerfile-manifest.json` (gitignored — a build artifact,
+regenerated fresh each time, never committed).
+
+- **Local dev:** run `npm run snapshot-dockerfiles` before `npm run dev` /
+  `npm run build` (the `prebuild` npm lifecycle hook already does this
+  automatically for `npm run build`). A fresh clone that hasn't run this yet
+  won't crash — `/dockerfiles` just shows an empty list with a console warning
+  until the manifest exists.
+- **CI:** `.github/workflows/ci-ops-dashboard.yml`'s `docker` job runs the
+  snapshot script as its own step, against that job's full checkout, **before**
+  the Docker build step (whose `context:` is narrowed to
+  `nuxt/ops-dashboard/` alone, same as every other service) — so the manifest
+  file already exists on disk by the time the build context is captured, and
+  gets picked up by the Dockerfile's normal `COPY . .` step like any other
+  project file.
 
 ## Run path A — bring your own socket proxy
 
