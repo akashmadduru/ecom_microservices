@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { BUILD_TARGETS, isBuildTarget } from '../src/targets.ts'
+import { BUILD_TARGETS, dockerfileRelativeToBuildContext, isBuildTarget } from '../src/targets.ts'
 
 describe('BUILD_TARGETS allowlist', () => {
   it('has exactly 7 entries', () => {
@@ -41,5 +41,17 @@ describe('BUILD_TARGETS allowlist', () => {
       expect(typeof target.buildContext).toBe('string')
       expect(target.buildContext.length).toBeGreaterThan(0)
     }
+  })
+
+  it('dockerfileRelativeToBuildContext resolves the Dockerfile path relative to the build context', () => {
+    expect(dockerfileRelativeToBuildContext('ops-dashboard')).toBe('Dockerfile')
+    expect(dockerfileRelativeToBuildContext('api-gateway')).toBe('python/services/api_gateway/Dockerfile')
+    expect(dockerfileRelativeToBuildContext('auth-service')).toBe('python/services/auth_service/Dockerfile')
+    expect(dockerfileRelativeToBuildContext('inventory-service')).toBe(
+      'python/services/inventory_service/Dockerfile',
+    )
+    expect(dockerfileRelativeToBuildContext('product-service')).toBe('python/services/product_service/Dockerfile')
+    expect(dockerfileRelativeToBuildContext('ecom-admin')).toBe('apps/ecom-admin/Dockerfile')
+    expect(dockerfileRelativeToBuildContext('ecom-web')).toBe('apps/ecom-web/Dockerfile')
   })
 })

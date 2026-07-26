@@ -8,6 +8,163 @@ existing Docker-socket-proxies).
 
 ---
 
+## 2026-07-26 — Phase 2 orchestration go-live: Finding 2's hard gate closed by a fresh, separate re-confirmation (not inherited from Phase 1) {#phase-2-finding-2-fresh-reconfirmation}
+
+**Context.** Phase 1's entry below (`#phase-1-two-blocking-findings-explicitly-accepted`)
+closed with an explicit **Revisit when** clause for Finding 2 (network-level-only
+isolation): "a hard blocking gate before Phase 2's real orchestration... ships — that
+phase must either implement genuine host/VM-level isolation for the build/launch
+execution surface, or bring this exact tradeoff back to the user for a fresh, explicit
+accept/reject decision; it must not simply inherit this Phase 1 acceptance by default."
+Phase 2 (this build: `GitCheckoutManager`, `RealGitAncestorGuard`, `BuildOrchestrator`,
+`LaunchOrchestrator`, `src/worker.ts`, and the `build-daemon` service in
+`docker-compose.yml`) is exactly that real orchestration. The implementer building this
+phase halted before writing any orchestration code specifically on this gate, and
+correctly declined to treat a plan description alone, or an unverified relayed claim of
+user approval, as satisfying it — escalating for the gate to be closed properly before
+proceeding. Recorded here per that requirement, sourced exactly as it reached this
+document: relayed via the orchestrating agent (the only agent with a direct conversation
+with the user in this session; subagents, including the implementer, have no separate
+channel to the user) from two direct `AskUserQuestion` exchanges with the user in that
+same conversation, quoted as given, not paraphrased by the implementer.
+
+**First exchange (initial architecture question, earlier in the same conversation).**
+Question: "Where will the isolated build daemon actually run?" Options offered: "Local
+network segmentation only, for now (Recommended)" vs. "You'll provision a separate
+VM/host yourself." **User's answer:** "Local network segmentation only, for now
+(Recommended)."
+
+**Second exchange (fresh re-confirmation at this specific go-live gate, per the
+implementer's explicit insistence that Finding 2 not be closed by inheritance alone).**
+Question, presented verbatim: "Confirm: proceed with Phase 2's real docker build/run
+execution using network-segmentation-only isolation (rootless DinD, separate compose
+network, no host/VM boundary) — same choice as before, now that it's about to become a
+live, executing system rather than scaffolding?" Options offered, verbatim:
+
+- "Yes, proceed as scoped (Recommended given earlier answer)" — description shown to the
+  user: "Confirm the earlier decision applies here too. I'll have the implementer
+  document this as a fresh, explicit re-confirmation in DecisionLog.md (not a silent
+  carryover), then build the real orchestration."
+- "No — require real host/VM isolation first" — description shown: "Pause Phase 2's
+  orchestration. This means provisioning an actual separate VM/host for the build daemon
+  before any real docker build/run code ships — real infrastructure work beyond what I
+  can provision myself in this environment."
+
+**User's answer:** "Yes, proceed as scoped (Recommended given earlier answer)."
+
+**Decision.** Finding 2's hard gate is satisfied by the "fresh, explicit accept/reject
+decision" branch of Phase 1's Revisit-when clause, not the "genuine host/VM-level
+isolation" branch: Phase 2 ships with the SAME network-level-only isolation as Phase 1
+(the isolated daemon is a sibling container on `ops_build_network`, not a separate
+host/VM), now carrying the materially larger blast radius this entry restates plainly
+below, with the user's own fresh decision on record for exactly this point rather than
+an inherited Phase 1 default.
+
+**The blast-radius change, stated plainly.** Phase 1 shipped a service that could only
+accept or reject an API request — a compromise of `build-runner-api` or
+`build-runner-db` could, at worst, forge/deny approval-workflow state. Phase 2 ships a
+service that ACTUALLY EXECUTES `docker build` and `docker run` against a real (if
+rootless) Docker daemon on `ops_build_network`. A compromise of `build-runner-api` now
+means an attacker-controlled process that can direct real container builds/launches
+against that daemon — a categorically larger capability than anything Phase 1's
+scaffold-only build could do, bounded only by network segmentation and the rootless
+daemon's own user-namespace boundary (see the next entry), not by a host/VM boundary.
+
+**Why accept rather than require host/VM isolation now.** Same practical reasoning
+Phase 1's entry gave for deferring Finding 2 in the first place, now revisited and
+re-affirmed rather than assumed: provisioning a genuinely separate host/VM for the
+build/launch execution surface is real infrastructure work outside what this
+implementation environment can provision itself (see the second exchange's own
+"No — require real host/VM isolation first" option description). The user, presented
+with that concrete tradeoff a second time and told plainly what accepting it now means
+(a live, executing system, not scaffolding), chose to proceed on the same basis as the
+original architecture decision rather than pause for that infrastructure work.
+
+**Alternatives rejected.** *Treat the plan document's description of network-only
+isolation as itself satisfying the gate* — rejected: a plan/task description authored by
+an agent is not the user's own accept/reject decision, which is exactly what this gate
+requires; the implementer correctly declined to proceed on that basis alone.
+*Treat the orchestrating agent's first, unverified relayed claim of user approval as
+sufficient* — rejected for the same reason, until the orchestrating agent supplied the
+actual verbatim question/option/answer record above and confirmed this relay is the only
+channel by which user decisions reach a subagent in this session.
+*Require real host/VM isolation before any Phase 2 code ships* — rejected, per the
+user's own second answer above, which explicitly weighed and declined that option's
+described cost ("real infrastructure work beyond what I can provision myself in this
+environment").
+
+**Consequences.** `docker-compose.yml`'s `build-daemon` service header comment and
+`docs/apps/ops-build-runner/Feature.md`'s Known Limitations section both restate this
+blast-radius change and the network-only posture, so an operator or reviewer encounters
+it before assuming Phase 2 is fully isolated at the compute layer.
+
+**Revisit when.** If this platform ever provisions genuine dedicated-host/VM isolation
+infrastructure, `build-daemon` should move onto it and this entry should be marked
+superseded. Until then, this is the operative decision for the build/launch execution
+surface's isolation posture — not Phase 1's entry, which this one supersedes for
+Finding 2 specifically (Finding 1, the shared-credential approval-workflow limitation, is
+untouched by this entry and remains governed by Phase 1's own Revisit-when clause).
+
+---
+
+## 2026-07-26 — Rootless Docker-in-Docker instead of classic privileged DinD: a third, freely-available risk reduction {#rootless-dind-risk-reduction}
+
+**Context.** Phase 2's `build-daemon` needs an actual Docker daemon to build/run
+against, isolated from the rest of this platform. The two readily-available shapes for a
+"Docker daemon running inside a container" are classic Docker-in-Docker (`docker:*-dind`,
+which needs `--privileged` or an equivalent broad capability grant) and rootless
+Docker-in-Docker (`docker:*-dind-rootless`, which runs dockerd inside user namespaces via
+`rootlesskit`, needing no `--privileged` and no extra Linux capabilities beyond
+`seccomp`/`apparmor` profile relaxations for rootlesskit's own namespace/mount setup).
+
+**Decision.** Use rootless DinD (`docker:27-dind-rootless`, pinned). Not offered to the
+user as a tradeoff, because it is not one: unlike Finding 2 (network-only isolation vs.
+host/VM isolation), there is no cost or capability this project actually needs that
+rootless DinD gives up relative to classic DinD -- builds are sequential, one at a time,
+per the approved architecture's own scalability section (`src/worker.ts` serializes
+them), so rootless DinD's single-daemon, non-Swarm posture is not a real limitation here.
+
+**Why this matters, stated plainly.** A classic, privileged DinD container can typically
+break out to the HOST KERNEL directly if compromised -- a kernel-level breakout is not
+stopped by a Docker bridge network boundary at all, so running `build-daemon` as
+privileged classic DinD would have UNDERCUT `ops_build_network`'s own segmentation (the
+isolation boundary the entry above re-accepts), not merely left it unimproved. Rootless
+DinD avoids that specific escalation path by construction (no `--privileged`, no
+CAP_SYS_ADMIN-equivalent grant), narrowing the blast radius of a compromised build daemon
+without touching the network-level-isolation tradeoff at all.
+
+**This is a third accepted-risk-reduction, not a fourth blocking finding.** Findings 1
+and 2 (Phase 1's entry) and the blast-radius change above (this phase's re-confirmation)
+are places where a real gap remains and was knowingly accepted. This is different: the
+safer option was available at no functional cost, so it was simply taken. Recorded here
+for the same reason Phase 1's findings were recorded plainly -- so the security posture
+of this stack is fully legible from its decision log, not just its code -- not because
+this one carries residual risk requiring the user's own sign-off the way the two findings
+above do.
+
+**Alternatives rejected.** *Classic privileged DinD* — rejected for the kernel-breakout
+reason above. *Skip DinD entirely and mount this host's own `/var/run/docker.sock` into
+`build-runner-api`* — rejected: this is exactly the host-root-equivalent access pattern
+`docs/apps/ops-dashboard/DecisionLog.md` already established this platform avoids
+wherever an alternative exists (see that doc's own docker-socket-proxy rationale); a
+rootless, isolated daemon is a materially narrower blast radius than the literal host
+socket, and was readily available here.
+
+**Consequences.** `docker-compose.yml`'s `build-daemon` service requires
+`security_opt: [seccomp=unconfined, apparmor=unconfined]` and `devices: [/dev/fuse]` to
+actually start (verified empirically: without both, `rootlesskit` fails immediately with
+"failed to start the child: fork/exec /proc/self/exe: operation not permitted" before
+dockerd ever starts) -- these are rootlesskit's own namespace/mount-setup requirements,
+not a broader capability grant, and do not reintroduce `--privileged`'s host-kernel-
+breakout exposure.
+
+**Revisit when.** Never, absent Docker deprecating rootless DinD or a future phase
+needing genuinely concurrent (not sequential) builds against this daemon, which would
+require re-evaluating this daemon's architecture entirely regardless of privileged vs.
+rootless.
+
+---
+
 ## 2026-07-25 — Phase 1 foundation build: two blocking findings explicitly accepted in writing by the user {#phase-1-two-blocking-findings-explicitly-accepted}
 
 **Context.** Phase 1 build ([`Feature.md`](./Feature.md)). Before any code was written,

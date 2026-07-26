@@ -20,11 +20,25 @@ FROM node:24-slim AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
 
+# Phase 2: GitCheckoutManager (src/git-checkout.ts) shells out to the real
+# `git` binary via execFile -- needed here in the RUNTIME image, since git
+# checkouts run as part of this service's own process, not inside the
+# isolated build-daemon (only the resulting build context is streamed there).
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends git \
+  && rm -rf /var/lib/apt/lists/*
+
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/migrations ./migrations
+
+# Phase 2's persistent git mirror / ephemeral worktrees / build logs --
+# created and chown'd here since the process itself runs as the unprivileged
+# `node` user below, and WORKDIR /app is root-owned by default.
+RUN mkdir -p /app/var/git-mirror /app/var/git-scratch /app/var/build-logs \
+  && chown -R node:node /app/var
 
 # Run as the built-in unprivileged node user.
 USER node

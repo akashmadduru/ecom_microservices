@@ -6,24 +6,38 @@
 #   BUILD_RUNNER_TOKEN=$(openssl rand -hex 32) docker compose up --build
 #
 # Security posture (see docs/apps/ops-build-runner/DecisionLog.md for the
-# full rationale, including the two explicitly-accepted residual risks):
+# full rationale, including the two explicitly-accepted residual risks from
+# Phase 1, and the fresh, separate Phase 2 re-confirmation of the same
+# network-only isolation tradeoff now that this stack actually executes
+# `docker build`/`docker run`, not just accepts/rejects API requests):
 #   - build-runner-db is a DEDICATED Postgres instance for this service only
 #     -- NOT the platform's ecom_network Postgres. Logically separate, per
 #     the approved architecture.
-#   - Both services sit on a NEW, dedicated `ops_build_network`. This compose
-#     file does not reference `ecom_network` or `ops_network` (nuxt/
-#     ops-dashboard's network) AT ALL -- that absence IS the isolation
-#     boundary at the network level.
+#   - All THREE services (build-runner-db, build-runner-api, build-daemon)
+#     sit on a NEW, dedicated `ops_build_network`. This compose file does not
+#     reference `ecom_network` or `ops_network` (nuxt/ops-dashboard's
+#     network) AT ALL -- that absence IS the isolation boundary at the
+#     network level.
 #   - IMPORTANT, stated plainly (not silently presented as fully solved):
 #     this is NETWORK-LEVEL segmentation ONLY, for local dev / this initial
 #     pass. It is explicitly NOT the full dedicated-host/VM isolation the
 #     approved architecture calls for as the complete solution for a service
-#     that (in a later phase) will execute `docker build`/`docker run` on
-#     behalf of an approved request. That gap is knowingly accepted for now
-#     -- see DecisionLog.md.
+#     that now (Phase 2) executes `docker build`/`docker run` on behalf of an
+#     approved request. That gap is knowingly re-accepted -- see
+#     DecisionLog.md's Phase 2 re-confirmation entry, a fresh, separate
+#     decision from Phase 1's, not an inherited default.
+#   - build-daemon (below) is ROOTLESS Docker-in-Docker, deliberately NOT
+#     classic `--privileged` DinD -- see that service's own comment for the
+#     full rationale. This is a THIRD, separate risk-REDUCTION this phase
+#     adds at no functional cost (builds are sequential, one at a time, per
+#     the approved architecture's own scalability section) -- it narrows the
+#     blast radius of a compromised build daemon, but it does not by itself
+#     substitute for the network-level-only isolation tradeoff above.
 #   - The API port is not published to the host by default; uncomment the
 #     `ports:` block below only for local development convenience, and never
-#     publish anything other than 127.0.0.1 (loopback).
+#     publish anything other than 127.0.0.1 (loopback). build-daemon's Docker
+#     API port is NEVER published to the host, under any circumstance -- only
+#     build-runner-api (same network) ever talks to it.
 
 name: ops-build-runner
 
@@ -50,6 +64,85 @@ services:
     # Not published to the host: only build-runner-api (same network) talks
     # to it, plus whatever runs `npm run migrate` from inside this network.
 
+  # ---------------------------------------------------------------------------
+  # Phase 2: the isolated Docker daemon BuildOrchestrator/LaunchOrchestrator
+  # actually run `docker build`/`docker run` against. ROOTLESS Docker-in-
+  # Docker (`docker:27-dind-rootless`), deliberately NOT classic
+  # `--privileged` DinD:
+  #
+  #   Classic DinD needs `--privileged` (or an equivalent broad capability
+  #   grant), which typically permits a compromised container to break out
+  #   to the HOST KERNEL directly -- a kernel-level breakout is not stopped
+  #   by a Docker bridge network boundary at all, so `--privileged` here
+  #   would UNDERCUT ops_build_network's own segmentation, not add to it.
+  #   Rootless DinD instead runs dockerd inside user namespaces via
+  #   rootlesskit -- no `--privileged`, no extra Linux capabilities beyond
+  #   what `security_opt`/`devices` below grant for rootlesskit's own
+  #   namespace/mount setup. This is Docker's own documented hardening
+  #   recommendation over classic DinD, and (since builds are sequential,
+  #   one at a time, per the approved architecture's own scalability
+  #   section) costs nothing in functionality here -- so it is taken, not
+  #   skipped. This is a THIRD, separate risk-REDUCTION on top of Phase 1's
+  #   two accepted findings, not a fourth blocking finding -- see
+  #   DecisionLog.md.
+  #
+  #   Pinned to an exact tag (not `:latest`), matching this monorepo's
+  #   established convention (see docker-compose.ops.yml's
+  #   `tecnativa/docker-socket-proxy:v0.4.2` comment for the same
+  #   rationale) -- a silent version bump changing rootless dockerd's
+  #   startup/security behavior should never happen un-reviewed.
+  build-daemon:
+    image: docker:27-dind-rootless
+    container_name: ops-build-runner-daemon
+    restart: unless-stopped
+    privileged: false
+    security_opt:
+      # Required for rootlesskit's own user-namespace/mount setup -- NOT a
+      # broad host-escape grant: this container still has no extra Linux
+      # capabilities and is not `--privileged`. Verified empirically against
+      # this exact image: without both of these, rootlesskit fails outright
+      # with "failed to start the child: fork/exec /proc/self/exe: operation
+      # not permitted" before dockerd ever starts.
+      - seccomp=unconfined
+      - apparmor=unconfined
+    devices:
+      # Rootless dockerd's storage driver (fuse-overlayfs) needs this.
+      - /dev/fuse
+    environment:
+      # Empty (not unset) disables TLS -- plain TCP within ops_build_network
+      # only, never published to the host. This is the same "internal-
+      # network-only, never host-published" posture as ops-dashboard's own
+      # docker-socket-proxies (see docker-compose.ops.yml) -- TLS would
+      # protect a socket this compose file never exposes beyond this one
+      # bridge network in the first place.
+      DOCKER_TLS_CERTDIR: ""
+    volumes:
+      - build_runner_daemon_storage:/home/rootless/.local/share/docker
+    healthcheck:
+      test: ["CMD", "docker", "info"]
+      interval: 10s
+      timeout: 10s
+      retries: 15
+      start_period: 20s
+    networks:
+      - ops_build_network
+    # Not published to the host, under any circumstance -- only
+    # build-runner-api (same network) ever talks to it, over plain TCP
+    # (2375) -- see build-runner-api's BUILD_DAEMON_HOST/PORT below.
+    #
+    # EGRESS, stated plainly rather than implied (Docker Compose has NO
+    # native egress-allowlist primitive -- this file cannot enforce the
+    # following, so it does not claim to): this daemon's outbound traffic
+    # (pulling base images; anything a build's own RUN instructions reach
+    # out to) is, absent host-level firewalling, unrestricted internet
+    # access from wherever this compose stack runs. A production deployment
+    # of this daemon MUST add an actual firewall/security-group rule
+    # restricting its outbound traffic to image registries only (docker.io,
+    # ghcr.io) and explicitly DENYING RFC1918 private ranges and the cloud
+    # metadata IP 169.254.169.254. That control lives at the network/
+    # firewall layer this compose file has no access to -- it is disclosed
+    # here, not enforced here.
+
   build-runner-api:
     build:
       context: .
@@ -58,6 +151,8 @@ services:
     restart: unless-stopped
     depends_on:
       build-runner-db:
+        condition: service_healthy
+      build-daemon:
         condition: service_healthy
     environment:
       # REQUIRED -- no default; the API fails closed (503) if this is unset.
@@ -68,6 +163,29 @@ services:
       SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
       APPROVAL_CODE_TTL_MINUTES: ${APPROVAL_CODE_TTL_MINUTES:-15}
       PORT: "4100"
+      # -- Phase 2: orchestration --------------------------------------
+      # REQUIRED -- no default; RealGitAncestorGuard cannot verify anything
+      # without it, and index.ts refuses to start if it is unset.
+      GIT_REMOTE_URL: ${GIT_REMOTE_URL:?set GIT_REMOTE_URL in the environment or a .env file}
+      GIT_MIRROR_DIR: /app/var/git-mirror
+      GIT_SCRATCH_ROOT_DIR: /app/var/git-scratch
+      BUILD_LOG_DIR: /app/var/build-logs
+      # The ISOLATED daemon above -- never this host's own daemon, never
+      # nuxt/ops-dashboard's docker-socket-proxies.
+      BUILD_DAEMON_HOST: build-daemon
+      BUILD_DAEMON_PORT: "2375"
+      LAUNCH_TTL_MINUTES: ${LAUNCH_TTL_MINUTES:-30}
+      WORKER_POLL_INTERVAL_SECONDS: ${WORKER_POLL_INTERVAL_SECONDS:-10}
+    volumes:
+      # Persists the ONE scoped git mirror and build logs across container
+      # restarts -- re-cloning the whole monorepo on every restart would be
+      # wasteful, and losing all build logs on every restart would undercut
+      # "persist the full log" (see BuildOrchestrator's own doc comment).
+      # The scratch/worktree directory is deliberately NOT volumed: it is
+      # ephemeral by design (a fresh worktree per build, cleaned up after),
+      # so there is nothing there worth persisting.
+      - build_runner_git_mirror:/app/var/git-mirror
+      - build_runner_build_logs:/app/var/build-logs
     # ports:
     #   # Uncomment for local development ONLY. Loopback-only, exactly like
     #   # ops-dashboard's own published port -- never 0.0.0.0.
@@ -85,3 +203,6 @@ networks:
 
 volumes:
   build_runner_postgres_data:
+  build_runner_daemon_storage:
+  build_runner_git_mirror:
+  build_runner_build_logs:

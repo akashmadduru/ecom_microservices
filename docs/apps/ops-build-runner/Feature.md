@@ -1,26 +1,29 @@
-# Feature: ops-build-runner — Phase 1 (Foundation: Scaffold, Data Model, Allowlist, Approval State Machine, REST API)
+# Feature: ops-build-runner — Phase 1 (Foundation) + Phase 2 (Real Orchestration)
 
 Last verified against: `ops-build-runner/` as built (plain Node.js 24 + TypeScript,
-`node:http` + a hand-rolled router, `pg`), `ops-build-runner/migrations/*.sql`,
+`node:http` + a hand-rolled router, `pg`, `dockerode`), `ops-build-runner/migrations/*.sql`,
 `ops-build-runner/src/{targets,state-machine,approval-code,token,config,
-git-ancestor-guard,audit,actor-signal,errors,db,migrate,index}.ts`,
+git-ancestor-guard,git-checkout,audit,actor-signal,errors,db,migrate,worker,index}.ts`,
+`ops-build-runner/src/orchestrator/{build-orchestrator,launch-orchestrator}.ts`,
 `ops-build-runner/src/notifier/{types,slack-notifier,console-notifier,factory}.ts`,
 `ops-build-runner/src/repository/{types,build-requests-repository,
-audit-log-repository,public-shape}.ts`, `ops-build-runner/src/service/
+audit-log-repository,public-shape,with-locked-request}.ts`, `ops-build-runner/src/service/
 build-request-service.ts`, `ops-build-runner/src/http/{router,auth,server,routes}.ts`,
 `ops-build-runner/docker-compose.yml`, `ops-build-runner/Dockerfile`,
 `ops-build-runner/.env.example`.
 
-**Grounding:** Built. This is Phase 1 of a multi-phase implementation, approved
-explicitly in writing by the user as a high-risk feature. Orchestration (the actual
-`docker build`/`docker run` execution, and a real `GitAncestorGuard` implementation)
-and dashboard-side integration/UI are **later phases, not built yet** — see Known
-Limitations below and [`DecisionLog.md`](./DecisionLog.md).
+**Grounding:** Built. Phase 1 (foundation: scaffold, data model, allowlist, approval
+state machine, REST API) and Phase 2 (real orchestration: `docker build`/`docker run`
+execution, the real `GitAncestorGuard`, TTL-based auto-teardown) are both built, approved
+explicitly in writing by the user as a high-risk feature at each phase. Dashboard-side
+integration/UI is Phase 3, a **later phase, not built yet** — see Known Limitations below
+and [`DecisionLog.md`](./DecisionLog.md).
 
-Related docs: [`DecisionLog.md`](./DecisionLog.md) (the two blocking findings the user
-explicitly accepted before this phase was built), `docs/apps/ops-dashboard/DecisionLog.md`
-(why this is a fourth, structurally separate subsystem rather than an extension of
-ops-dashboard's existing Docker-socket-proxies).
+Related docs: [`DecisionLog.md`](./DecisionLog.md) (Phase 1's two blocking findings the
+user explicitly accepted before that phase was built, and Phase 2's fresh, separate
+re-confirmation of the isolation tradeoff before real orchestration shipped),
+`docs/apps/ops-dashboard/DecisionLog.md` (why this is a fourth, structurally separate
+subsystem rather than an extension of ops-dashboard's existing Docker-socket-proxies).
 
 ## Summary
 
@@ -216,19 +219,51 @@ path; and a migration-level static assertion for `audit_log`'s role privileges (
 Postgres instance is available in this environment to test the real enforced grants —
 see that test file's own doc comment and [DecisionLog](./DecisionLog.md)).
 
-## Known Limitations (Phase 1)
+## Phase 2 (built): real orchestration
 
-- **No build/launch orchestration exists yet.** `build_requests.state` can currently
-  only reach `requested`, `approved`, and terminal states reachable from those two
-  (`rejected`/`expired`/`cancelled`) plus `launch_requested`/`launch_approved` — nothing
-  in this phase ever transitions a row to `building`, `built`, `launched`, or
-  `torn_down`; that requires Phase 2's real orchestration.
-- **`GitAncestorGuard` always rejects.** Every `POST /build-requests` call fails at
-  validation step (4) until Phase 2 implements the real `git fetch` + ancestor check.
-  This is intentional fail-closed behavior for a security-sensitive gate with no real
-  implementation yet, not a bug to be silently worked around.
+`build_requests.state` can now reach every state in the machine for real:
+`RealGitAncestorGuard` (`src/git-ancestor-guard.ts`) replaces Phase 1's always-reject
+stub, backed by `GitCheckoutManager` (`src/git-checkout.ts`), which maintains one
+persistent, scoped git clone of the monorepo (`GIT_REMOTE_URL`), refreshed with a real
+`git fetch` before every ancestor check, and checks out a fresh `git worktree` per build
+(never a shared mutable working directory). `BuildOrchestrator`
+(`src/orchestrator/build-orchestrator.ts`) runs a real `docker build` against the
+isolated `build-daemon` (rootless Docker-in-Docker — see `docker-compose.yml`),
+persisting the full build log to `BUILD_LOG_DIR` and transitioning `approved -> building
+-> built|build_failed`. `LaunchOrchestrator` (`src/orchestrator/launch-orchestrator.ts`)
+runs a real `docker run` of THIS SAME request's own `image_local_tag` only (never a
+caller-supplied image reference), applying a mandatory TTL and transitioning
+`launch_approved -> launched|launch_failed`. `src/worker.ts` is a simple polling
+background loop that drives both orchestrators, tears down TTL-expired launched
+containers, and sweeps expired approval-code windows into `expired`. Builds/launches are
+serialized (one at a time against the one isolated daemon) — see `src/worker.ts`'s own
+doc comment. No image is ever pushed to a registry; everything stays local to the
+isolated daemon.
+
+## Known Limitations
+
 - **The approval workflow is not a real security boundary against a compromised
   `BUILD_RUNNER_TOKEN`** — see [DecisionLog](./DecisionLog.md) for this finding restated
-  in full, as explicitly accepted by the user.
+  in full, as explicitly accepted by the user (Phase 1).
 - **This is network-level isolation only**, not full host/VM isolation — see
-  [DecisionLog](./DecisionLog.md).
+  [DecisionLog](./DecisionLog.md)'s Phase 1 finding and its Phase 2 entry re-confirming
+  the same tradeoff now that this stack actually executes `docker build`/`docker run`,
+  not just accepts/rejects API requests. **The blast radius is now materially larger**
+  than Phase 1's: a compromise of `build-runner-api` can now direct real container
+  builds/launches against the isolated daemon, bounded only by `ops_build_network`'s
+  segmentation and the rootless daemon's own user-namespace boundary — not by a host/VM
+  boundary. `build-daemon` itself IS rootless Docker-in-Docker rather than classic
+  privileged DinD (a third, cost-free risk reduction — see
+  [DecisionLog](./DecisionLog.md)'s rootless-DinD entry), which narrows one specific
+  escalation path (kernel-level breakout via `--privileged`) without changing the
+  network-only isolation tradeoff itself.
+- **Egress from `build-daemon` is not restricted by this compose file.** Docker Compose
+  has no native egress-allowlist primitive; production deployment needs an actual
+  firewall/security-group rule restricting this daemon's outbound traffic to image
+  registries only and denying RFC1918 ranges plus the cloud metadata IP
+  `169.254.169.254` — see `docker-compose.yml`'s own comment on this.
+- **Build logs are a local file per request** (`BUILD_LOG_DIR`, one file per
+  `request_id`), not a full object-storage integration — a documented simplification for
+  this phase, not an oversight.
+- **No manual "stop early" route for a launched container** — teardown only happens via
+  the TTL sweep (`src/worker.ts`); this phase's REST contract is unchanged from Phase 1.

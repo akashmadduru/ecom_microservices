@@ -8,14 +8,26 @@ and
 [`docs/apps/ops-build-runner/DecisionLog.md`](../docs/apps/ops-build-runner/DecisionLog.md)
 for the full design and the two explicitly-accepted residual risks.
 
-**Phase 1 (this state): scaffold only.** The 7-entry target allowlist, the
-approval state machine, the REST API, the durable Postgres model, and a
-pluggable Slack/console approval notifier are implemented. Actual `docker
-build`/`docker run` execution (`GitAncestorGuard`'s real implementation, and
-the orchestration that runs a build/launch once approved) is **Phase 2, not
-yet built** -- every `POST /build-requests` call will currently be rejected at
-the git-ancestor-verification step by design (see
-`src/git-ancestor-guard.ts`).
+**Phase 1: scaffold.** The 7-entry target allowlist, the approval state
+machine, the REST API, the durable Postgres model, and a pluggable
+Slack/console approval notifier.
+
+**Phase 2 (this state): real orchestration.** `RealGitAncestorGuard`
+(`src/git-ancestor-guard.ts`) replaces Phase 1's always-reject stub, backed by
+`GitCheckoutManager` (`src/git-checkout.ts`) -- a real `git fetch` + `git
+merge-base --is-ancestor` check against one persistent, scoped clone of the
+monorepo. `BuildOrchestrator`/`LaunchOrchestrator`
+(`src/orchestrator/`) run real `docker build`/`docker run` against an
+isolated, rootless-Docker-in-Docker daemon (`docker-compose.yml`'s
+`build-daemon` service) -- never this host's own daemon, never
+`nuxt/ops-dashboard`'s docker-socket-proxies. `src/worker.ts` is a background
+poller that drives both orchestrators, tears down TTL-expired launched
+containers, and sweeps expired approval-code windows. See
+[`docs/apps/ops-build-runner/DecisionLog.md`](../docs/apps/ops-build-runner/DecisionLog.md)
+for the isolation posture this operates under -- network-level segmentation
+only, a fresh, separate re-confirmation of the same tradeoff Phase 1 accepted,
+not an inherited default. Dashboard-side integration/UI is Phase 3, not yet
+built.
 
 ## Local development
 
