@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ecom-common-java: shared library for the Java/Spring services, analogous
+  to python/libs/ecom_common. Phase 0 scope: JWT verification/decoding
+  (minting stays auth-service-only, matching the Python
+  ecom_common.auth/auth_service.security split) and the EventEnvelope wire
+  model. Plain library jar (no Spring Boot application dependencies) — this
+  is consumed by, not itself, a runnable service.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.ecom</groupId>
+        <artifactId>ecom-spring</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>ecom-common-java</artifactId>
+    <packaging>jar</packaging>
+
+    <name>ecom-common-java</name>
+    <description>Shared library: JWT decoding (Nimbus JOSE+JWT), EventEnvelope (Jackson), analogous to python/libs/ecom_common.</description>
+
+    <dependencies>
+        <!--
+          JWT verification/decoding — the library Spring Security's own
+          resource-server support uses under the hood (see D3 in the
+          migration DecisionLog). Used directly here since Phase 0 has no
+          Spring Security filter chain yet.
+        -->
+        <dependency>
+            <groupId>com.nimbusds</groupId>
+            <artifactId>nimbus-jose-jwt</artifactId>
+        </dependency>
+
+        <!-- EventEnvelope (de)serialization, matching Jackson's role as the
+             default Spring Boot JSON mapper. -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.datatype</groupId>
+            <artifactId>jackson-datatype-jsr310</artifactId>
+        </dependency>
+
+        <!-- BCryptPasswordEncoder for the bcrypt cross-compatibility proof.
+             spring-security-crypto has no servlet/web dependency, so this
+             does not drag in Spring MVC/WebFlux/Security's filter chain. -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-crypto</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+</project>

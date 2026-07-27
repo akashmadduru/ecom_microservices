@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Root (parent/aggregator) POM for the ecom-spring multi-module workspace.
+  Parallel to python/, vue/, and nuxt/ at the repo root — this is the Maven
+  workspace root for the Java/Spring migration replacing the Python
+  api_gateway and auth_service. product_service and inventory_service stay
+  Python/FastAPI permanently and are out of scope here.
+
+  Phase 0 scope: scaffolding + the shared library (libs/ecom-common-java)
+  only. Later phases will add modules for services/api-gateway and
+  services/auth-service under <modules> below.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.ecom</groupId>
+    <artifactId>ecom-spring</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
+
+    <name>ecom-spring</name>
+    <description>Java/Spring migration workspace: shared library plus (in later phases) the Reactive Spring Cloud Gateway and auth-service replacements for the Python api_gateway/auth_service.</description>
+
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+        <!--
+          Java 21 (LTS) is the floor this migration's approved design assumes
+          (virtual threads, Spring Boot 3.2+). maven.compiler.release
+          compiles against the Java 21 API/language surface regardless of
+          which (newer) JDK actually runs the build.
+        -->
+        <maven.compiler.release>21</maven.compiler.release>
+
+        <!-- Kept in lockstep with the Spring Boot BOM imported below so
+             every module (this one now, services/* in later phases) shares
+             one version set for Jackson/Nimbus/Spring Security
+             Crypto/JUnit/AssertJ. -->
+        <spring-boot.version>3.3.4</spring-boot.version>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-dependencies</artifactId>
+                <version>${spring-boot.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <version>3.13.0</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <version>3.5.1</version>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+    </build>
+
+    <modules>
+        <module>libs/ecom-common-java</module>
+        <!--
+          Later phases add, in order:
+            <module>services/api-gateway</module>
+            <module>services/auth-service</module>
+        -->
+    </modules>
+</project>
