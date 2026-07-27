@@ -1,13 +1,5 @@
 package com.ecom.auth.controller;
 
-import com.ecom.auth.dto.RefreshTokenRequest;
-import com.ecom.auth.dto.TokenPairResponse;
-import com.ecom.auth.dto.UserLoginRequest;
-import com.ecom.auth.dto.UserResponse;
-import com.ecom.auth.dto.UserSignupRequest;
-import com.ecom.auth.model.User;
-import com.ecom.auth.security.TokenPayload;
-import com.ecom.auth.service.AuthService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -16,6 +8,15 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import com.ecom.auth.dto.RefreshTokenRequest;
+import com.ecom.auth.dto.TokenPairResponse;
+import com.ecom.auth.dto.UserLoginRequest;
+import com.ecom.auth.dto.UserResponse;
+import com.ecom.auth.dto.UserSignupRequest;
+import com.ecom.auth.model.User;
+import com.ecom.auth.security.TokenPayload;
+import com.ecom.auth.service.AuthService;
 
 @RestController
 @RequestMapping("/auth")
