@@ -1,23 +1,31 @@
 package com.ecom.auth.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+import lombok.ToString;
 
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@ToString
 public class UserResponse {
     @JsonProperty("user_id")
-    public String userId;
+    private String userId;
 
-    public String username;
-    public String email;
-    public String role;
-    public String provider;
+    private String username;
+    private String email;
+    private String role;
+    private String provider;
 
     @JsonProperty("is_active")
-    public Boolean isActive;
+    private Boolean isActive;
 
     @JsonProperty("authenticated")
-    public Boolean authenticated;
-
-    public UserResponse() {}
+    private Boolean authenticated;
 
     public UserResponse(String userId, String username, String email, String role, String provider, Boolean isActive) {
         this.userId = userId;
@@ -27,33 +35,5 @@ public class UserResponse {
         this.provider = provider;
         this.isActive = isActive;
         this.authenticated = true;
-    }
-
-    public String getUserId() {
-        return userId;
-    }
-
-    public String getUsername() {
-        return username;
-    }
-
-    public String getEmail() {
-        return email;
-    }
-
-    public String getRole() {
-        return role;
-    }
-
-    public String getProvider() {
-        return provider;
-    }
-
-    public Boolean getIsActive() {
-        return isActive;
-    }
-
-    public Boolean getAuthenticated() {
-        return authenticated;
     }
 }

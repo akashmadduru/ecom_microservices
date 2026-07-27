@@ -1,5 +1,6 @@
 /Users/akash/Desktop/projects/ecom_microservices/spring/services/auth-service/src/main/java/com/ecom/auth/AuthServiceApplication.java
 /Users/akash/Desktop/projects/ecom_microservices/spring/services/auth-service/src/main/java/com/ecom/auth/config/DatabaseConfig.java
+/Users/akash/Desktop/projects/ecom_microservices/spring/services/auth-service/src/main/java/com/ecom/auth/config/HibernateConfig.java
 /Users/akash/Desktop/projects/ecom_microservices/spring/services/auth-service/src/main/java/com/ecom/auth/config/RedisConfig.java
 /Users/akash/Desktop/projects/ecom_microservices/spring/services/auth-service/src/main/java/com/ecom/auth/config/SecurityConfig.java
 /Users/akash/Desktop/projects/ecom_microservices/spring/services/auth-service/src/main/java/com/ecom/auth/controller/AuthController.java
@@ -16,8 +17,13 @@
 /Users/akash/Desktop/projects/ecom_microservices/spring/services/auth-service/src/main/java/com/ecom/auth/exception/UserConflictException.java
 /Users/akash/Desktop/projects/ecom_microservices/spring/services/auth-service/src/main/java/com/ecom/auth/model/RefreshToken.java
 /Users/akash/Desktop/projects/ecom_microservices/spring/services/auth-service/src/main/java/com/ecom/auth/model/User.java
+/Users/akash/Desktop/projects/ecom_microservices/spring/services/auth-service/src/main/java/com/ecom/auth/repository/BaseRepository.java
 /Users/akash/Desktop/projects/ecom_microservices/spring/services/auth-service/src/main/java/com/ecom/auth/repository/RefreshTokenRepository.java
+/Users/akash/Desktop/projects/ecom_microservices/spring/services/auth-service/src/main/java/com/ecom/auth/repository/RefreshTokenRepositoryCustom.java
+/Users/akash/Desktop/projects/ecom_microservices/spring/services/auth-service/src/main/java/com/ecom/auth/repository/RefreshTokenRepositoryImpl.java
 /Users/akash/Desktop/projects/ecom_microservices/spring/services/auth-service/src/main/java/com/ecom/auth/repository/UserRepository.java
+/Users/akash/Desktop/projects/ecom_microservices/spring/services/auth-service/src/main/java/com/ecom/auth/repository/UserRepositoryCustom.java
+/Users/akash/Desktop/projects/ecom_microservices/spring/services/auth-service/src/main/java/com/ecom/auth/repository/UserRepositoryImpl.java
 /Users/akash/Desktop/projects/ecom_microservices/spring/services/auth-service/src/main/java/com/ecom/auth/security/JwtProcessingException.java
 /Users/akash/Desktop/projects/ecom_microservices/spring/services/auth-service/src/main/java/com/ecom/auth/security/JwtTokenProvider.java
 /Users/akash/Desktop/projects/ecom_microservices/spring/services/auth-service/src/main/java/com/ecom/auth/security/TokenPayload.java

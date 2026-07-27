@@ -27,12 +27,11 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <!--
-          Java 21 (LTS) is the floor this migration's approved design assumes
-          (virtual threads, Spring Boot 3.2+). maven.compiler.release
-          compiles against the Java 21 API/language surface regardless of
-          which (newer) JDK actually runs the build.
+          Java 17 (LTS) for Lombok compatibility. Provides stable, long-term
+          support while enabling annotation processor-based tooling like Lombok.
+          Maven compiler targets Java 17 API/language surface.
         -->
-        <maven.compiler.release>21</maven.compiler.release>
+        <maven.compiler.release>17</maven.compiler.release>
 
         <!-- Kept in lockstep with the Spring Boot BOM imported below so
              every module (this one now, services/* in later phases) shares
@@ -40,6 +39,7 @@
              Crypto/JUnit/AssertJ. -->
         <spring-boot.version>3.3.4</spring-boot.version>
         <spring-cloud.version>2023.0.3</spring-cloud.version>
+        <lombok.version>1.18.30</lombok.version>
     </properties>
 
     <dependencyManagement>
@@ -83,6 +83,15 @@
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-compiler-plugin</artifactId>
                     <version>3.13.0</version>
+                    <configuration>
+                        <annotationProcessorPaths>
+                            <path>
+                                <groupId>org.projectlombok</groupId>
+                                <artifactId>lombok</artifactId>
+                                <version>${lombok.version}</version>
+                            </path>
+                        </annotationProcessorPaths>
+                    </configuration>
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
