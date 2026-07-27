@@ -1,9 +1,14 @@
 package com.ecom.auth.config;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
 public class RedisConfig {
-    // Spring Data Redis auto-configuration is sufficient for basic operations
-    // RedisTemplate beans are provided by Spring Boot auto-configuration
+
+    @Bean
+    public ObjectMapper objectMapper() {
+        return new ObjectMapper();
+    }
 }

@@ -2,14 +2,18 @@ package com.ecom.auth.model;
 
 import jakarta.persistence.*;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.DynamicInsert;
+import org.hibernate.annotations.DynamicUpdate;
 
 import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "refresh_tokens", indexes = {
     @Index(name = "idx_refresh_tokens_user_id", columnList = "user_id"),
-    @Index(name = "idx_refresh_tokens_jti", columnList = "jti", unique = true)
+    @Index(name = "idx_refresh_tokens_jti", columnList = "jti")
 })
+@DynamicInsert
+@DynamicUpdate
 public class RefreshToken {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -31,10 +35,37 @@ public class RefreshToken {
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    public RefreshToken() {
+    }
+
     public RefreshToken(String userId, String tokenHash, String jti, LocalDateTime expiresAt) {
         this.userId = userId;
         this.tokenHash = tokenHash;
         this.jti = jti;
         this.expiresAt = expiresAt;
+    }
+
+    public String getId() {
+        return id;
+    }
+
+    public String getUserId() {
+        return userId;
+    }
+
+    public String getTokenHash() {
+        return tokenHash;
+    }
+
+    public String getJti() {
+        return jti;
+    }
+
+    public LocalDateTime getExpiresAt() {
+        return expiresAt;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
     }
 }
