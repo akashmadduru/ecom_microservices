@@ -2,13 +2,12 @@
 <!--
   Root (parent/aggregator) POM for the ecom-spring multi-module workspace.
   Parallel to python/, vue/, and nuxt/ at the repo root — this is the Maven
-  workspace root for the Java/Spring migration replacing the Python
-  api_gateway and auth_service. product_service and inventory_service stay
-  Python/FastAPI permanently and are out of scope here.
+  workspace root for the Java/Spring migration. Per the updated plan,
+  product_service and inventory_service are NOW BEING MIGRATED from FastAPI to Spring Boot.
 
-  Phase 0 scope: scaffolding + the shared library (libs/ecom-common-java)
-  only. Later phases will add modules for services/api-gateway and
-  services/auth-service under <modules> below.
+  Phase 0: scaffolding + the shared library (libs/ecom-common-java)
+  Phase 1+: Product Service models, repositories, services
+  Phase 4+: Inventory Service models, repositories, Kafka integration
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -40,8 +39,9 @@
         <spring-boot.version>3.3.4</spring-boot.version>
         <spring-cloud.version>2023.0.3</spring-cloud.version>
         <lombok.version>1.18.32</lombok.version>
-        <!-- IMPORTANT: Annotation processing disabled due to Java 25 / Lombok 1.18.x incompatibility.
-             See modules/pom.xml for how to override this if Java 17 is available. -->
+        <!-- Annotation processing disabled by default (-proc:none) for ecom-common-java
+             (which doesn't use Lombok). Services override with -proc:full to enable Lombok.
+             Requires Java 17 LTS for proper Lombok support. -->
         <maven.compiler.proc>none</maven.compiler.proc>
     </properties>
 
@@ -114,5 +114,6 @@
         <module>libs/ecom-common-java</module>
         <module>services/auth-service</module>
         <module>services/api-gateway</module>
+        <module>services/product-service</module>
     </modules>
 </project>
