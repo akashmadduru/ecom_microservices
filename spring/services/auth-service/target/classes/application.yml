@@ -39,7 +39,20 @@ server:
   servlet:
     context-path: /
 
+resilience4j:
+  ratelimiter:
+    instances:
+      authServiceLimiter:
+        limitRefreshPeriod: 1m
+        limitForPeriod: 100
+        timeoutDuration: 5s
+      loginLimiter:
+        limitRefreshPeriod: 1m
+        limitForPeriod: 10
+        timeoutDuration: 5s
+
 logging:
   level:
     root: INFO
     com.ecom: DEBUG
+    io.github.resilience4j: INFO

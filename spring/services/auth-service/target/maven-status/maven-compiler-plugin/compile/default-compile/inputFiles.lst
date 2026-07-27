@@ -22,5 +22,6 @@
 /Users/akash/Desktop/projects/ecom_microservices/spring/services/auth-service/src/main/java/com/ecom/auth/security/JwtTokenProvider.java
 /Users/akash/Desktop/projects/ecom_microservices/spring/services/auth-service/src/main/java/com/ecom/auth/security/TokenPayload.java
 /Users/akash/Desktop/projects/ecom_microservices/spring/services/auth-service/src/main/java/com/ecom/auth/service/AuthService.java
+/Users/akash/Desktop/projects/ecom_microservices/spring/services/auth-service/src/main/java/com/ecom/auth/session/RedisSessionCache.java
 /Users/akash/Desktop/projects/ecom_microservices/spring/services/auth-service/src/main/java/com/ecom/auth/session/SessionData.java
 /Users/akash/Desktop/projects/ecom_microservices/spring/services/auth-service/src/main/java/com/ecom/auth/session/SessionStore.java

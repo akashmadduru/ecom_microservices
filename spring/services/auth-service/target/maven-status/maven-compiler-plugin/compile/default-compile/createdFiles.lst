@@ -22,6 +22,7 @@ com/ecom/auth/session/SessionData.class
 com/ecom/auth/repository/UserRepository.class
 com/ecom/auth/exception/UserConflictException.class
 com/ecom/auth/security/TokenPayload.class
+com/ecom/auth/session/RedisSessionCache.class
 com/ecom/auth/dto/UserSignupRequest.class
 com/ecom/auth/AuthServiceApplication.class
 com/ecom/auth/controller/AuthController.class
