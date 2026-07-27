@@ -3,7 +3,6 @@ package com.ecom.gateway.filter;
 import com.nimbusds.jose.crypto.MACVerifier;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
@@ -15,7 +14,6 @@ import reactor.core.publisher.Mono;
 import java.text.ParseException;
 import java.util.Date;
 
-@Slf4j
 @Component
 public class JwtAuthenticationFilter implements GlobalFilter {
     @Value("${auth.jwt.secret:your-secret-key-change-in-production-min-32-chars}")
@@ -58,8 +56,10 @@ public class JwtAuthenticationFilter implements GlobalFilter {
                     .build();
 
             return chain.filter(exchange);
-        } catch (ParseException | Exception e) {
-            log.warn("JWT validation failed: {}", e.getMessage());
+        } catch (ParseException e) {
+            exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
+            return exchange.getResponse().setComplete();
+        } catch (Exception e) {
             exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
             return exchange.getResponse().setComplete();
         }

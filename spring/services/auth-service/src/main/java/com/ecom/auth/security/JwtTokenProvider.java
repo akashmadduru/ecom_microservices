@@ -25,12 +25,12 @@ public class JwtTokenProvider {
     private final JWSVerifier verifier;
 
     public JwtTokenProvider(
-            @Value("${jwt.secret}") String jwtSecret,
-            @Value("${jwt.algorithm:HS256}") String jwtAlgorithm,
-            @Value("${jwt.issuer:ecom-auth-service}") String jwtIssuer,
-            @Value("${jwt.audience:ecom-api}") String jwtAudience,
-            @Value("${jwt.access-token-expiration:900}") int accessTokenExpirationSeconds,
-            @Value("${jwt.refresh-token-expiration:604800}") int refreshTokenExpirationSeconds) {
+            @Value("${auth.jwt.secret}") String jwtSecret,
+            @Value("${auth.jwt.algorithm:HS256}") String jwtAlgorithm,
+            @Value("${auth.jwt.issuer:ecom-auth-service}") String jwtIssuer,
+            @Value("${auth.jwt.audience:ecom-api}") String jwtAudience,
+            @Value("${auth.jwt.access-token-expiration:900}") int accessTokenExpirationSeconds,
+            @Value("${auth.jwt.refresh-token-expiration:604800}") int refreshTokenExpirationSeconds) {
         this.jwtSecret = jwtSecret;
         this.jwtAlgorithm = jwtAlgorithm;
         this.jwtIssuer = jwtIssuer;
