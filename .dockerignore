@@ -1,0 +1,16 @@
+.git
+.gitignore
+.DS_Store
+.github
+.vscode
+.env*
+docker-compose*.infra.yml
+README.md
+Makefile
+deploy/
+docs/
+.gitattributes
+node_modules/
+.pytest_cache/
+__pycache__/
+*.pyc

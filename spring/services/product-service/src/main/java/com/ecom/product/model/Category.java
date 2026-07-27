@@ -1,11 +1,6 @@
 package com.ecom.product.model;
 
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
-import lombok.ToString;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.DynamicInsert;
 import org.hibernate.annotations.DynamicUpdate;
@@ -28,11 +23,6 @@ uniqueConstraints = {
 })
 @DynamicInsert
 @DynamicUpdate
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-@ToString
 public class Category {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -67,11 +57,123 @@ public class Category {
     @Column(nullable = false)
     private LocalDateTime updatedAt;
 
+    public Category() {
+    }
+
     public Category(String name, String slug, String path) {
         this.name = name;
         this.slug = slug;
         this.path = path;
         this.isActive = true;
         this.depth = path.split("\\.").length - 1;
+    }
+
+    public Category(Integer id, Integer parentId, String name, String slug, String path, Integer depth, Boolean isActive, Integer sortOrder, LocalDateTime createdAt, LocalDateTime updatedAt) {
+        this.id = id;
+        this.parentId = parentId;
+        this.name = name;
+        this.slug = slug;
+        this.path = path;
+        this.depth = depth;
+        this.isActive = isActive;
+        this.sortOrder = sortOrder;
+        this.createdAt = createdAt;
+        this.updatedAt = updatedAt;
+    }
+
+    public Integer getId() {
+        return this.id;
+    }
+
+    public void setId(Integer id) {
+        this.id = id;
+    }
+
+    public Integer getParentId() {
+        return this.parentId;
+    }
+
+    public void setParentId(Integer parentId) {
+        this.parentId = parentId;
+    }
+
+    public String getName() {
+        return this.name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public String getSlug() {
+        return this.slug;
+    }
+
+    public void setSlug(String slug) {
+        this.slug = slug;
+    }
+
+    public String getPath() {
+        return this.path;
+    }
+
+    public void setPath(String path) {
+        this.path = path;
+    }
+
+    public Integer getDepth() {
+        return this.depth;
+    }
+
+    public void setDepth(Integer depth) {
+        this.depth = depth;
+    }
+
+    public Boolean getIsActive() {
+        return this.isActive;
+    }
+
+    public void setIsActive(Boolean isActive) {
+        this.isActive = isActive;
+    }
+
+    public Integer getSortOrder() {
+        return this.sortOrder;
+    }
+
+    public void setSortOrder(Integer sortOrder) {
+        this.sortOrder = sortOrder;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return this.createdAt;
+    }
+
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
+    }
+
+    public LocalDateTime getUpdatedAt() {
+        return this.updatedAt;
+    }
+
+    public void setUpdatedAt(LocalDateTime updatedAt) {
+        this.updatedAt = updatedAt;
+    }
+
+    @Override
+    public String toString() {
+        return "Category{" +
+                "id=" + id +
+                ", parentId=" + parentId +
+                ", name='" + name + '\'' +
+                ", slug='" + slug + '\'' +
+                ", path='" + path + '\'' +
+                ", depth=" + depth +
+                ", isActive=" + isActive +
+                ", sortOrder=" + sortOrder +
+                ", createdAt=" + createdAt +
+                ", updatedAt=" + updatedAt +
+                '}';
     }
 }

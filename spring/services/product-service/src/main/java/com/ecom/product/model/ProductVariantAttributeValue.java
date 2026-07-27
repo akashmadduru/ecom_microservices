@@ -1,11 +1,6 @@
 package com.ecom.product.model;
 
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
-import lombok.ToString;
 
 /**
  * ProductVariantAttributeValue: junction table for ProductVariant-AttributeValue many-to-many relationship.
@@ -16,11 +11,6 @@ import lombok.ToString;
  */
 @Entity
 @Table(name = "product_variant_attribute_values")
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-@ToString
 @IdClass(ProductVariantAttributeValueId.class)
 public class ProductVariantAttributeValue {
     @Id
@@ -30,4 +20,36 @@ public class ProductVariantAttributeValue {
     @Id
     @Column(name = "attribute_value_id")
     private Integer attributeValueId;
+
+    public ProductVariantAttributeValue() {
+    }
+
+    public ProductVariantAttributeValue(Integer variantId, Integer attributeValueId) {
+        this.variantId = variantId;
+        this.attributeValueId = attributeValueId;
+    }
+
+    public Integer getVariantId() {
+        return this.variantId;
+    }
+
+    public void setVariantId(Integer variantId) {
+        this.variantId = variantId;
+    }
+
+    public Integer getAttributeValueId() {
+        return this.attributeValueId;
+    }
+
+    public void setAttributeValueId(Integer attributeValueId) {
+        this.attributeValueId = attributeValueId;
+    }
+
+    @Override
+    public String toString() {
+        return "ProductVariantAttributeValue{" +
+                "variantId=" + variantId +
+                ", attributeValueId=" + attributeValueId +
+                '}';
+    }
 }

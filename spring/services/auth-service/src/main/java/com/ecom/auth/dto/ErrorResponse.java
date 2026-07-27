@@ -1,13 +1,5 @@
 package com.ecom.auth.dto;
 
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
-import lombok.ToString;
-
-@Getter
-@Setter
 public class ErrorResponse {
     private Error error;
 
@@ -19,14 +11,70 @@ public class ErrorResponse {
         this.error = new Error(code, message, details, null);
     }
 
-    @Getter
-    @Setter
-    @AllArgsConstructor
-    @ToString
+    public Error getError() {
+        return this.error;
+    }
+
+    public void setError(Error error) {
+        this.error = error;
+    }
+
     public static class Error {
         private String code;
         private String message;
         private Object details;
         private String correlationId;
+
+        public Error() {
+        }
+
+        public Error(String code, String message, Object details, String correlationId) {
+            this.code = code;
+            this.message = message;
+            this.details = details;
+            this.correlationId = correlationId;
+        }
+
+        public String getCode() {
+            return this.code;
+        }
+
+        public void setCode(String code) {
+            this.code = code;
+        }
+
+        public String getMessage() {
+            return this.message;
+        }
+
+        public void setMessage(String message) {
+            this.message = message;
+        }
+
+        public Object getDetails() {
+            return this.details;
+        }
+
+        public void setDetails(Object details) {
+            this.details = details;
+        }
+
+        public String getCorrelationId() {
+            return this.correlationId;
+        }
+
+        public void setCorrelationId(String correlationId) {
+            this.correlationId = correlationId;
+        }
+
+        @Override
+        public String toString() {
+            return "Error{" +
+                    "code='" + code + '\'' +
+                    ", message='" + message + '\'' +
+                    ", details=" + details +
+                    ", correlationId='" + correlationId + '\'' +
+                    '}';
+        }
     }
 }

@@ -18,9 +18,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
-import org.springframework.data.domain.PageRequest.of;
 import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -48,6 +46,7 @@ import java.util.UUID;
 @Slf4j
 @RequiredArgsConstructor
 public class ProductService {
+
     private final ProductRepository productRepository;
     private final KafkaTemplate<String, EventEnvelope> kafkaTemplate;
 

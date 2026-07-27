@@ -1,11 +1,6 @@
 package com.ecom.product.model;
 
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
-import lombok.ToString;
 
 /**
  * CollectionProduct: junction table for Collection-Product many-to-many relationship.
@@ -13,11 +8,6 @@ import lombok.ToString;
  */
 @Entity
 @Table(name = "collection_products")
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-@ToString
 @IdClass(CollectionProductId.class)
 public class CollectionProduct {
     @Id
@@ -30,4 +20,51 @@ public class CollectionProduct {
 
     @Column(nullable = false, name = "sort_order")
     private Integer sortOrder = 0;
+
+    public CollectionProduct() {
+    }
+
+    public CollectionProduct(Integer collectionId, Integer productId) {
+        this.collectionId = collectionId;
+        this.productId = productId;
+    }
+
+    public CollectionProduct(Integer collectionId, Integer productId, Integer sortOrder) {
+        this.collectionId = collectionId;
+        this.productId = productId;
+        this.sortOrder = sortOrder;
+    }
+
+    public Integer getCollectionId() {
+        return this.collectionId;
+    }
+
+    public void setCollectionId(Integer collectionId) {
+        this.collectionId = collectionId;
+    }
+
+    public Integer getProductId() {
+        return this.productId;
+    }
+
+    public void setProductId(Integer productId) {
+        this.productId = productId;
+    }
+
+    public Integer getSortOrder() {
+        return this.sortOrder;
+    }
+
+    public void setSortOrder(Integer sortOrder) {
+        this.sortOrder = sortOrder;
+    }
+
+    @Override
+    public String toString() {
+        return "CollectionProduct{" +
+                "collectionId=" + collectionId +
+                ", productId=" + productId +
+                ", sortOrder=" + sortOrder +
+                '}';
+    }
 }
