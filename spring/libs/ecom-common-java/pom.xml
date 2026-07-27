@@ -48,6 +48,19 @@
             <artifactId>jackson-datatype-jsr310</artifactId>
         </dependency>
 
+        <!-- Lombok for reducing boilerplate. -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- Logging with SLF4J. -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+        </dependency>
+
         <!-- BCryptPasswordEncoder for the bcrypt cross-compatibility proof.
              spring-security-crypto has no servlet/web dependency, so this
              does not drag in Spring MVC/WebFlux/Security's filter chain. -->

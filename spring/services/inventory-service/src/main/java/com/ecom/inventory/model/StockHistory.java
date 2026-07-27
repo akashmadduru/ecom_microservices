@@ -1,11 +1,6 @@
 package com.ecom.inventory.model;
 
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
-import lombok.ToString;
 import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.LocalDateTime;
@@ -25,11 +20,6 @@ import java.time.LocalDateTime;
     @Index(name = "idx_stock_history_created_at", columnList = "created_at DESC"),
     @Index(name = "idx_stock_history_product_created", columnList = "product_id, created_at DESC")
 })
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-@ToString
 public class StockHistory {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -103,6 +93,9 @@ public class StockHistory {
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    public StockHistory() {
+    }
+
     public StockHistory(Long stockId, Long productId, String operationType, Integer qtyChange, String reason) {
         this.stockId = stockId;
         this.productId = productId;
@@ -110,5 +103,119 @@ public class StockHistory {
         this.qtyChange = qtyChange;
         this.reason = reason;
         this.createdAt = LocalDateTime.now();
+    }
+
+    public Long getId() {
+        return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    public Long getStockId() {
+        return stockId;
+    }
+
+    public void setStockId(Long stockId) {
+        this.stockId = stockId;
+    }
+
+    public Long getProductId() {
+        return productId;
+    }
+
+    public void setProductId(Long productId) {
+        this.productId = productId;
+    }
+
+    public String getOperationType() {
+        return operationType;
+    }
+
+    public void setOperationType(String operationType) {
+        this.operationType = operationType;
+    }
+
+    public Integer getQtyChange() {
+        return qtyChange;
+    }
+
+    public void setQtyChange(Integer qtyChange) {
+        this.qtyChange = qtyChange;
+    }
+
+    public String getReason() {
+        return reason;
+    }
+
+    public void setReason(String reason) {
+        this.reason = reason;
+    }
+
+    public Integer getAvailableQtyBefore() {
+        return availableQtyBefore;
+    }
+
+    public void setAvailableQtyBefore(Integer availableQtyBefore) {
+        this.availableQtyBefore = availableQtyBefore;
+    }
+
+    public Integer getReservedQtyBefore() {
+        return reservedQtyBefore;
+    }
+
+    public void setReservedQtyBefore(Integer reservedQtyBefore) {
+        this.reservedQtyBefore = reservedQtyBefore;
+    }
+
+    public Integer getAvailableQtyAfter() {
+        return availableQtyAfter;
+    }
+
+    public void setAvailableQtyAfter(Integer availableQtyAfter) {
+        this.availableQtyAfter = availableQtyAfter;
+    }
+
+    public Integer getReservedQtyAfter() {
+        return reservedQtyAfter;
+    }
+
+    public void setReservedQtyAfter(Integer reservedQtyAfter) {
+        this.reservedQtyAfter = reservedQtyAfter;
+    }
+
+    public String getCreatedBy() {
+        return createdBy;
+    }
+
+    public void setCreatedBy(String createdBy) {
+        this.createdBy = createdBy;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
+    }
+
+    @Override
+    public String toString() {
+        return "StockHistory{" +
+                "id=" + id +
+                ", stockId=" + stockId +
+                ", productId=" + productId +
+                ", operationType='" + operationType + '\'' +
+                ", qtyChange=" + qtyChange +
+                ", reason='" + reason + '\'' +
+                ", availableQtyBefore=" + availableQtyBefore +
+                ", reservedQtyBefore=" + reservedQtyBefore +
+                ", availableQtyAfter=" + availableQtyAfter +
+                ", reservedQtyAfter=" + reservedQtyAfter +
+                ", createdBy='" + createdBy + '\'' +
+                ", createdAt=" + createdAt +
+                '}';
     }
 }

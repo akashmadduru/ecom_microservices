@@ -4,8 +4,8 @@ import com.ecom.common.exception.ConflictException;
 import com.ecom.common.exception.ValidationException;
 import com.ecom.inventory.model.Stock;
 import com.ecom.inventory.model.StockHistory;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,11 +22,15 @@ import java.time.LocalDateTime;
  * - Version field updates for optimistic locking
  */
 @Repository
-@Slf4j
-@RequiredArgsConstructor
 public class StockMutationRepositoryImpl implements StockMutationRepository {
+    private static final Logger log = LoggerFactory.getLogger(StockMutationRepositoryImpl.class);
     private final StockRepository stockRepository;
     private final StockHistoryRepository stockHistoryRepository;
+
+    public StockMutationRepositoryImpl(StockRepository stockRepository, StockHistoryRepository stockHistoryRepository) {
+        this.stockRepository = stockRepository;
+        this.stockHistoryRepository = stockHistoryRepository;
+    }
 
     @Override
     @Transactional(propagation = Propagation.REQUIRED)

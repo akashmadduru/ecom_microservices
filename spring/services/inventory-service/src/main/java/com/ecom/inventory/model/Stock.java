@@ -1,11 +1,6 @@
 package com.ecom.inventory.model;
 
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
-import lombok.ToString;
 import org.hibernate.annotations.DynamicInsert;
 import org.hibernate.annotations.DynamicUpdate;
 import org.hibernate.annotations.UpdateTimestamp;
@@ -29,11 +24,6 @@ import java.time.LocalDateTime;
 })
 @DynamicInsert
 @DynamicUpdate
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-@ToString
 public class Stock {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -132,5 +122,128 @@ public class Stock {
      */
     public Integer getTotalQuantity() {
         return (availableQty != null ? availableQty : 0) + (reservedQty != null ? reservedQty : 0);
+    }
+
+    public Long getId() {
+        return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    public Long getProductId() {
+        return productId;
+    }
+
+    public void setProductId(Long productId) {
+        this.productId = productId;
+    }
+
+    public String getSku() {
+        return sku;
+    }
+
+    public void setSku(String sku) {
+        this.sku = sku;
+    }
+
+    public Integer getAvailableQty() {
+        return availableQty;
+    }
+
+    public void setAvailableQty(Integer availableQty) {
+        this.availableQty = availableQty;
+    }
+
+    public Integer getReservedQty() {
+        return reservedQty;
+    }
+
+    public void setReservedQty(Integer reservedQty) {
+        this.reservedQty = reservedQty;
+    }
+
+    public Integer getSafetyStock() {
+        return safetyStock;
+    }
+
+    public void setSafetyStock(Integer safetyStock) {
+        this.safetyStock = safetyStock;
+    }
+
+    public Integer getReorderThreshold() {
+        return reorderThreshold;
+    }
+
+    public void setReorderThreshold(Integer reorderThreshold) {
+        this.reorderThreshold = reorderThreshold;
+    }
+
+    public Integer getSoldQty() {
+        return soldQty;
+    }
+
+    public void setSoldQty(Integer soldQty) {
+        this.soldQty = soldQty;
+    }
+
+    public String getWarehouseLocation() {
+        return warehouseLocation;
+    }
+
+    public void setWarehouseLocation(String warehouseLocation) {
+        this.warehouseLocation = warehouseLocation;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
+    }
+
+    public Long getVersion() {
+        return version;
+    }
+
+    public void setVersion(Long version) {
+        this.version = version;
+    }
+
+    public LocalDateTime getUpdatedAt() {
+        return updatedAt;
+    }
+
+    public void setUpdatedAt(LocalDateTime updatedAt) {
+        this.updatedAt = updatedAt;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
+    }
+
+    @Override
+    public String toString() {
+        return "Stock{" +
+                "id=" + id +
+                ", productId=" + productId +
+                ", sku='" + sku + '\'' +
+                ", availableQty=" + availableQty +
+                ", reservedQty=" + reservedQty +
+                ", safetyStock=" + safetyStock +
+                ", reorderThreshold=" + reorderThreshold +
+                ", soldQty=" + soldQty +
+                ", warehouseLocation='" + warehouseLocation + '\'' +
+                ", status='" + status + '\'' +
+                ", version=" + version +
+                ", updatedAt=" + updatedAt +
+                ", createdAt=" + createdAt +
+                '}';
     }
 }
