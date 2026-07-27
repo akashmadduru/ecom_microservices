@@ -50,6 +50,21 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+            <dependency>
+                <groupId>com.nimbusds</groupId>
+                <artifactId>nimbus-jose-jwt</artifactId>
+                <version>9.37.3</version>
+            </dependency>
+            <dependency>
+                <groupId>org.flywaydb</groupId>
+                <artifactId>flyway-core</artifactId>
+                <version>10.10.0</version>
+            </dependency>
+            <dependency>
+                <groupId>org.flywaydb</groupId>
+                <artifactId>flyway-database-postgresql</artifactId>
+                <version>10.10.0</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
@@ -72,10 +87,7 @@
 
     <modules>
         <module>libs/ecom-common-java</module>
-        <!--
-          Later phases add, in order:
-            <module>services/api-gateway</module>
-            <module>services/auth-service</module>
-        -->
+        <module>services/auth-service</module>
+        <module>services/api-gateway</module>
     </modules>
 </project>
