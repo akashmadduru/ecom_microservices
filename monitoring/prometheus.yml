@@ -1,0 +1,63 @@
+# Prometheus Configuration
+# Scrapes metrics from all microservices and exposes them for Grafana
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'ecom-microservices'
+
+# Alerting rules
+rule_files:
+  - '/etc/prometheus/alert-rules.yml'
+
+# Alert manager configuration (optional for this setup)
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+scrape_configs:
+  # Products Service
+  - job_name: 'products-service'
+    static_configs:
+      - targets: ['products-service:8083']
+    metrics_path: '/actuator/prometheus'
+    scrape_interval: 15s
+    scrape_timeout: 5s
+    healthcheck_uri: 'http://products-service:8083/actuator/health'
+
+  # Cart Service
+  - job_name: 'cart-service'
+    static_configs:
+      - targets: ['cart-service:8084']
+    metrics_path: '/actuator/prometheus'
+    scrape_interval: 15s
+    scrape_timeout: 5s
+    healthcheck_uri: 'http://cart-service:8084/actuator/health'
+
+  # Inventory Service
+  - job_name: 'inventory-service'
+    static_configs:
+      - targets: ['inventory-service:8085']
+    metrics_path: '/actuator/prometheus'
+    scrape_interval: 15s
+    scrape_timeout: 5s
+    healthcheck_uri: 'http://inventory-service:8085/actuator/health'
+
+  # API Gateway
+  - job_name: 'api-gateway'
+    static_configs:
+      - targets: ['api-gateway:8080']
+    metrics_path: '/actuator/prometheus'
+    scrape_interval: 15s
+    scrape_timeout: 5s
+    healthcheck_uri: 'http://api-gateway:8080/actuator/health'
+
+  # Auth Service (optional, if you want to monitor it)
+  # - job_name: 'auth-service'
+  #   static_configs:
+  #     - targets: ['auth-service:8082']
+  #   metrics_path: '/actuator/prometheus'
+  #   scrape_interval: 15s
+  #   scrape_timeout: 5s

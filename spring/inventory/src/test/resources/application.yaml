@@ -1,0 +1,34 @@
+spring:
+  application:
+    name: inventory-test
+
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+
+  datasource:
+    url: jdbc:h2:mem:testdb
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+
+  h2:
+    console:
+      enabled: true
+
+  flyway:
+    enabled: false
+
+  cloud:
+    stream:
+      bindings:
+        cartEventConsumer-in-0:
+          destination: cart-events
+        removedFromCartEventConsumer-in-0:
+          destination: cart-events
+        inventoryEventProducer-out-0:
+          destination: inventory-events
+
+server:
+  port: 0

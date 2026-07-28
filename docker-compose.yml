@@ -1,19 +1,84 @@
+version: '3.8'
+
 services:
-  # PostgreSQL Database
-  postgres:
+  # PostgreSQL for Auth Service
+  auth-db:
     image: postgres:15-alpine
-    container_name: ecom_postgres
+    container_name: ecom_auth_db
     environment:
-      POSTGRES_DB: ecommerce
-      POSTGRES_USER: ${DB_USER:-ecom_user}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-ecom_password}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: auth_db
+    ports:
+      - "5431:5432"
+    volumes:
+      - auth_db_data:/var/lib/postgresql/data
+      - ./scripts/sql/01-auth_db.sql:/docker-entrypoint-initdb.d/01-auth_db.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ecom-network
+
+  # PostgreSQL for Products Service
+  products-db:
+    image: postgres:15-alpine
+    container_name: ecom_products_db
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: products_db
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./scripts/init-databases.sql:/docker-entrypoint-initdb.d/init-databases.sql
+      - products_db_data:/var/lib/postgresql/data
+      - ./scripts/sql/02-products_db.sql:/docker-entrypoint-initdb.d/02-products_db.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-ecom_user} -d ecommerce"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ecom-network
+
+  # PostgreSQL for Cart Service
+  cart-db:
+    image: postgres:15-alpine
+    container_name: ecom_cart_db
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: cart_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - cart_db_data:/var/lib/postgresql/data
+      - ./scripts/sql/03-cart_db.sql:/docker-entrypoint-initdb.d/03-cart_db.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ecom-network
+
+  # PostgreSQL for Inventory Service
+  inventory-db:
+    image: postgres:15-alpine
+    container_name: ecom_inventory_db
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: inventory_db
+    ports:
+      - "5434:5432"
+    volumes:
+      - inventory_db_data:/var/lib/postgresql/data
+      - ./scripts/sql/04-inventory_db.sql:/docker-entrypoint-initdb.d/04-inventory_db.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -63,11 +128,10 @@ services:
         condition: service_healthy
     ports:
       - "9092:9092"
-      - "19092:19092"
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://kafka:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
@@ -80,64 +144,30 @@ services:
     networks:
       - ecom-network
 
-  # Auth Service
+  # Auth Service (Spring Boot)
   auth-service:
     build:
       context: .
-      dockerfile: spring/services/auth-service/Dockerfile
+      dockerfile: spring/auth/Dockerfile
     container_name: ecom_auth_service
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/ecommerce_auth
-      SPRING_DATASOURCE_USERNAME: ${DB_USER:-ecom_user}
-      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-ecom_password}
-      SPRING_REDIS_HOST: redis
-      SPRING_REDIS_PORT: 6379
-      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-      SERVER_PORT: 8081
-      JAVA_TOOL_OPTIONS: "-Xmx512m"
-    ports:
-      - "8081:8081"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      kafka:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8081/actuator/health"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-    networks:
-      - ecom-network
-    restart: on-failure
-
-  # Product Service (Python/FastAPI)
-  product-service:
-    build:
-      context: .
-      dockerfile: fast/services/product_service/Dockerfile
-    container_name: ecom_product_service
-    environment:
-      DATABASE_URL: postgresql://${DB_USER:-ecom_user}:${DB_PASSWORD:-ecom_password}@postgres:5432/ecommerce_product
-      REDIS_URL: redis://redis:6379
+      DB_HOST: auth-db
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-      AUTH_SERVICE_URL: http://auth-service:8081
-      PORT: 8082
+      JWT_SECRET: ${JWT_SECRET:-your-secret-key-change-in-production}
+      JWT_EXPIRATION: ${JWT_EXPIRATION:-86400}
+      JAVA_TOOL_OPTIONS: "-Xmx512m"
     ports:
       - "8082:8082"
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
+      auth-db:
         condition: service_healthy
       kafka:
         condition: service_healthy
-      auth-service:
-        condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8082/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8082/actuator/health"]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -145,34 +175,86 @@ services:
       - ecom-network
     restart: on-failure
 
-  # Inventory Service (Python/FastAPI)
-  inventory-service:
+  # Products Service (Spring Boot)
+  products-service:
     build:
       context: .
-      dockerfile: fast/services/inventory_service/Dockerfile
-    container_name: ecom_inventory_service
+      dockerfile: spring/products/Dockerfile
+    container_name: ecom_products_service
     environment:
-      DATABASE_URL: postgresql://${DB_USER:-ecom_user}:${DB_PASSWORD:-ecom_password}@postgres:5432/ecommerce_inventory
-      REDIS_URL: redis://redis:6379
+      DB_HOST: products-db
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-      PRODUCT_SERVICE_URL: http://product-service:8082
-      AUTH_SERVICE_URL: http://auth-service:8081
-      PORT: 8083
+      JAVA_TOOL_OPTIONS: "-Xmx512m"
     ports:
       - "8083:8083"
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
+      products-db:
         condition: service_healthy
       kafka:
         condition: service_healthy
-      auth-service:
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8083/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ecom-network
+    restart: on-failure
+
+  # Cart Service (Spring Boot)
+  cart-service:
+    build:
+      context: .
+      dockerfile: spring/cart/Dockerfile
+    container_name: ecom_cart_service
+    environment:
+      DB_HOST: cart-db
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      JAVA_TOOL_OPTIONS: "-Xmx512m"
+    ports:
+      - "8084:8084"
+    depends_on:
+      cart-db:
         condition: service_healthy
-      product-service:
+      kafka:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8083/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8084/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ecom-network
+    restart: on-failure
+
+  # Inventory Service (Spring Boot)
+  inventory-service:
+    build:
+      context: .
+      dockerfile: spring/inventory/Dockerfile
+    container_name: ecom_inventory_service
+    environment:
+      DB_HOST: inventory-db
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      JAVA_TOOL_OPTIONS: "-Xmx512m"
+    ports:
+      - "8085:8085"
+    depends_on:
+      inventory-db:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8085/actuator/health"]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -184,20 +266,22 @@ services:
   api-gateway:
     build:
       context: .
-      dockerfile: spring/services/api-gateway/Dockerfile
+      dockerfile: spring/gateway/Dockerfile
     container_name: ecom_api_gateway
     environment:
-      AUTH_SERVICE_URL: http://auth-service:8081
-      PRODUCT_SERVICE_URL: http://product-service:8082
-      INVENTORY_SERVICE_URL: http://inventory-service:8083
-      SERVER_PORT: 8080
+      SPRING_REDIS_HOST: redis
+      SPRING_REDIS_PORT: 6379
       JAVA_TOOL_OPTIONS: "-Xmx512m"
     ports:
       - "8080:8080"
     depends_on:
+      redis:
+        condition: service_healthy
       auth-service:
         condition: service_healthy
-      product-service:
+      products-service:
+        condition: service_healthy
+      cart-service:
         condition: service_healthy
       inventory-service:
         condition: service_healthy
@@ -210,10 +294,69 @@ services:
       - ecom-network
     restart: on-failure
 
+  # Prometheus Monitoring
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: ecom_prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./monitoring/alert-rules.yml:/etc/prometheus/alert-rules.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      - auth-service
+      - products-service
+      - cart-service
+      - inventory-service
+      - api-gateway
+    networks:
+      - ecom-network
+    restart: on-failure
+
+  # Grafana Dashboards
+  grafana:
+    image: grafana/grafana:latest
+    container_name: ecom_grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_INSTALL_PLUGINS: 'redis-datasource'
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+      - ./monitoring/grafana/dashboards:/etc/grafana/dashboards
+    depends_on:
+      - prometheus
+    networks:
+      - ecom-network
+    restart: on-failure
+
 volumes:
-  postgres_data:
+  auth_db_data:
+    driver: local
+  products_db_data:
+    driver: local
+  cart_db_data:
+    driver: local
+  inventory_db_data:
     driver: local
   redis_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
     driver: local
 
 networks:

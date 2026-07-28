@@ -1,0 +1,24 @@
+spring:
+  application:
+    name: products-test
+
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+
+  datasource:
+    url: jdbc:h2:mem:testdb
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+
+  h2:
+    console:
+      enabled: true
+
+  flyway:
+    enabled: false
+
+server:
+  port: 0

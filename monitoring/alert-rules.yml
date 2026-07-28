@@ -1,0 +1,116 @@
+# Prometheus Alert Rules
+# These rules define conditions that trigger alerts based on metrics
+
+groups:
+  - name: ecom_alerts
+    interval: 30s
+    rules:
+
+      # Circuit Breaker Alerts
+      - alert: CircuitBreakerOpen
+        expr: resilience4j_circuitbreaker_state{state="OPEN"} == 1
+        for: 2m
+        labels:
+          severity: warning
+          component: resilience
+        annotations:
+          summary: "Circuit Breaker Open: {{ $labels.name }}"
+          description: "Circuit breaker '{{ $labels.name }}' is in OPEN state on {{ $labels.instance }}. Service calls are being blocked."
+
+      - alert: CircuitBreakerHalfOpen
+        expr: resilience4j_circuitbreaker_state{state="HALF_OPEN"} == 1
+        for: 1m
+        labels:
+          severity: info
+          component: resilience
+        annotations:
+          summary: "Circuit Breaker Half-Open: {{ $labels.name }}"
+          description: "Circuit breaker '{{ $labels.name }}' is in HALF_OPEN state on {{ $labels.instance }}. Testing recovery."
+
+      # Error Rate Alerts
+      - alert: HighErrorRate
+        expr: rate(http_server_requests_seconds_count{status=~"5.."}[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          component: http
+        annotations:
+          summary: "High Error Rate on {{ $labels.instance }}"
+          description: "Error rate is {{ $value | humanizePercentage }} on {{ $labels.instance }} for {{ $labels.uri }}. Expected <5%."
+
+      # Response Time Alerts
+      - alert: HighResponseTime
+        expr: histogram_quantile(0.95, rate(http_server_requests_seconds_bucket[5m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+          component: performance
+        annotations:
+          summary: "High Response Time on {{ $labels.instance }}"
+          description: "95th percentile response time is {{ $value | humanizeDuration }} on {{ $labels.instance }} for {{ $labels.uri }}. Expected <2s."
+
+      # Database Connection Pool Alerts
+      - alert: HighDatabaseConnectionUsage
+        expr: hikaricp_connections_active / hikaricp_connections_max > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          component: database
+        annotations:
+          summary: "High Database Connection Pool Usage on {{ $labels.instance }}"
+          description: "Database connection pool usage is {{ $value | humanizePercentage }} on {{ $labels.instance }}. Expected <80%."
+
+      # JVM Memory Alerts
+      - alert: HighJVMMemoryUsage
+        expr: jvm_memory_used_bytes{area="heap"} / jvm_memory_max_bytes{area="heap"} > 0.85
+        for: 5m
+        labels:
+          severity: warning
+          component: jvm
+        annotations:
+          summary: "High JVM Heap Memory Usage on {{ $labels.instance }}"
+          description: "JVM heap memory usage is {{ $value | humanizePercentage }} on {{ $labels.instance }}. Expected <85%."
+
+      # Inventory Low Stock Alert
+      - alert: LowInventoryStock
+        expr: inventory_low_stock_count > 0
+        for: 1m
+        labels:
+          severity: info
+          component: inventory
+        annotations:
+          summary: "Products with Low Inventory"
+          description: "{{ $value }} product(s) have low inventory levels. Check inventory service for details."
+
+      # Service Down Alerts
+      - alert: ServiceDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: infrastructure
+        annotations:
+          summary: "Service Down: {{ $labels.job }}"
+          description: "Service {{ $labels.job }} on {{ $labels.instance }} is down or not responding to health checks."
+
+      # High Cart Checkout Failure
+      - alert: HighCheckoutFailureRate
+        expr: rate(cart_checkout_completed{status="failed"}[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          component: business
+        annotations:
+          summary: "High Checkout Failure Rate"
+          description: "Checkout failure rate is {{ $value | humanizePercentage }}. Expected <10%."
+
+      # Kafka Consumer Lag (if applicable)
+      - alert: KafkaConsumerLagHigh
+        expr: kafka_consumer_lag > 1000
+        for: 10m
+        labels:
+          severity: warning
+          component: messaging
+        annotations:
+          summary: "High Kafka Consumer Lag"
+          description: "Kafka consumer lag is {{ $value }} messages. Consumer may be falling behind."

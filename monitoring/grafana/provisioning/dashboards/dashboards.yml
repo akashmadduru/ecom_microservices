@@ -1,0 +1,15 @@
+# Grafana Dashboards Configuration
+# Automatically provisioned when Grafana starts
+
+apiVersion: 1
+
+providers:
+  - name: 'ecom-dashboards'
+    orgId: 1
+    folder: 'E-Commerce Monitoring'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/dashboards
