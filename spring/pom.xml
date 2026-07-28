@@ -5,21 +5,25 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>com.ecom</groupId>
-    <artifactId>ecom-spring-parent</artifactId>
+    <artifactId>ecom-ecom-lib</artifactId>
     <version>1.0.0</version>
     <packaging>pom</packaging>
 
-    <name>ecom-spring-parent</name>
+    <name>ecom-ecom-lib</name>
     <description>Parent POM for ecommerce Spring Boot microservices</description>
+
+    <modules>
+        <module>gateway</module>
+        <module>products</module>
+    </modules>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <java.version>25</java.version>
+        <maven.compiler.release>25</maven.compiler.release>
         <spring-boot.version>4.1.0</spring-boot.version>
         <spring-cloud.version>2025.1.2</spring-cloud.version>
-        <maven.compiler.source>25</maven.compiler.source>
-        <maven.compiler.target>25</maven.compiler.target>
     </properties>
 
     <dependencyManagement>
@@ -57,8 +61,7 @@
                     <artifactId>maven-compiler-plugin</artifactId>
                     <version>3.13.0</version>
                     <configuration>
-                        <source>${java.version}</source>
-                        <target>${java.version}</target>
+                        <release>${maven.compiler.release}</release>
                     </configuration>
                 </plugin>
             </plugins>
