@@ -4,28 +4,16 @@
 	<modelVersion>4.0.0</modelVersion>
 	<parent>
 		<groupId>com.ecom</groupId>
-		<artifactId>ecom-spring-parent</artifactId>
+		<artifactId>ecom-ecom-lib</artifactId>
 		<version>1.0.0</version>
 		<relativePath>../pom.xml</relativePath>
 	</parent>
 	<groupId>com.ecom</groupId>
 	<artifactId>gateway</artifactId>
 	<version>1.0.0</version>
-	<name/>
-	<description/>
-	<url/>
-	<licenses>
-		<license/>
-	</licenses>
-	<developers>
-		<developer/>
-	</developers>
-	<scm>
-		<connection/>
-		<developerConnection/>
-		<tag/>
-		<url/>
-	</scm>
+	<name>gateway</name>
+	<description>API Gateway microservice</description>
+
 	<dependencies>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
