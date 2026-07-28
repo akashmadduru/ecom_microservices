@@ -7,18 +7,18 @@ import jakarta.persistence.*;
  * Includes sort_order for ordering products within a collection.
  */
 @Entity
-@Table(name = "collection_products")
+@Table()
 @IdClass(CollectionProductId.class)
 public class CollectionProduct {
     @Id
-    @Column(name = "collection_id")
+    @Column()
     private Integer collectionId;
 
     @Id
-    @Column(name = "product_id")
+    @Column()
     private Integer productId;
 
-    @Column(nullable = false, name = "sort_order")
+    @Column(nullable = false)
     private Integer sortOrder = 0;
 
     public CollectionProduct() {

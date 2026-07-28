@@ -7,7 +7,7 @@ import jakarta.persistence.*;
  * Examples: Size, Color, Material.
  */
 @Entity
-@Table(name = "product_attributes", indexes = {
+@Table(indexes = {
     @Index(name = "idx_attribute_code", columnList = "code")
 })
 public class ProductAttribute {
@@ -21,10 +21,10 @@ public class ProductAttribute {
     @Column(nullable = false, unique = true, length = 100)
     private String code;
 
-    @Column(nullable = false, name = "is_variant_defining")
+    @Column(nullable = false)
     private Boolean isVariantDefining = false;
 
-    @Column(nullable = false, name = "sort_order")
+    @Column(nullable = false)
     private Integer sortOrder = 0;
 
     public ProductAttribute() {

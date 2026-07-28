@@ -15,12 +15,7 @@ import java.time.LocalDateTime;
  * PostgreSQL ltree extension is used for indexed subtree queries on path::ltree.
  */
 @Entity
-@Table(name = "categories", indexes = {
-    @Index(name = "idx_category_slug", columnList = "slug")
-},
-uniqueConstraints = {
-    @UniqueConstraint(name = "uq_categories_parent_name", columnNames = {"parent_id", "name"})
-})
+@Table(indexes = {@Index(name = "idx_category_slug", columnList = "slug")})
 @DynamicInsert
 @DynamicUpdate
 public class Category {
@@ -28,7 +23,7 @@ public class Category {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
 
-    @Column(name = "parent_id")
+    @Column()
     private Integer parentId;
 
     @Column(nullable = false, length = 150)
@@ -43,10 +38,10 @@ public class Category {
     @Column(nullable = false)
     private Integer depth = 0;
 
-    @Column(nullable = false, name = "is_active")
+    @Column(nullable = false)
     private Boolean isActive = true;
 
-    @Column(nullable = false, name = "sort_order")
+    @Column(nullable = false)
     private Integer sortOrder = 0;
 
     @CreationTimestamp

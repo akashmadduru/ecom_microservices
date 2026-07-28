@@ -12,7 +12,7 @@ import java.time.LocalDateTime;
  * Manufacturer: represents a product manufacturer (OEM).
  */
 @Entity
-@Table(name = "manufacturers", indexes = {
+@Table(indexes = {
     @Index(name = "idx_manufacturer_name", columnList = "name")
 })
 @DynamicInsert
@@ -25,7 +25,7 @@ public class Manufacturer {
     @Column(nullable = false, unique = true, length = 200)
     private String name;
 
-    @Column(name = "country_of_origin", length = 2)
+    @Column(length = 2)
     private String countryOfOrigin;  // ISO alpha-2
 
     @Column(columnDefinition = "jsonb")

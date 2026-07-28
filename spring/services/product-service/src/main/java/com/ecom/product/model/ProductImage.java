@@ -9,7 +9,7 @@ import jakarta.persistence.*;
  * Enforces uniqueness constraint for PRIMARY images per product/variant.
  */
 @Entity
-@Table(name = "product_images", indexes = {
+@Table(indexes = {
     @Index(name = "ix_product_images_product_id", columnList = "product_id"),
     @Index(name = "ix_product_images_variant_id", columnList = "variant_id")
 })
@@ -18,10 +18,10 @@ public class ProductImage {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
 
-    @Column(name = "product_id", nullable = false)
+    @Column(nullable = false)
     private Integer productId;
 
-    @Column(name = "variant_id")
+    @Column()
     private Integer variantId;
 
     @Column(nullable = false, length = 20)
@@ -30,19 +30,19 @@ public class ProductImage {
     @Column(nullable = false, columnDefinition = "text")
     private String url;
 
-    @Column(name = "video_url", columnDefinition = "text")
+    @Column(columnDefinition = "text")
     private String videoUrl;
 
-    @Column(name = "alt_text", length = 255)
+    @Column(length = 255)
     private String altText;
 
-    @Column(nullable = false, name = "sort_order")
+    @Column(nullable = false)
     private Integer sortOrder = 0;
 
     // Relationship to Product
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "product_id", updatable = false, insertable = false)
-    private Product product;
+    @JoinColumn(updatable = false, insertable = false)
+    private Products products;
 
     public ProductImage() {
     }
@@ -60,7 +60,7 @@ public class ProductImage {
         this.url = url;
     }
 
-    public ProductImage(Integer id, Integer productId, Integer variantId, String kind, String url, String videoUrl, String altText, Integer sortOrder, Product product) {
+    public ProductImage(Integer id, Integer productId, Integer variantId, String kind, String url, String videoUrl, String altText, Integer sortOrder, Products products) {
         this.id = id;
         this.productId = productId;
         this.variantId = variantId;
@@ -69,7 +69,7 @@ public class ProductImage {
         this.videoUrl = videoUrl;
         this.altText = altText;
         this.sortOrder = sortOrder;
-        this.product = product;
+        this.products = products;
     }
 
     public Integer getId() {
@@ -136,12 +136,12 @@ public class ProductImage {
         this.sortOrder = sortOrder;
     }
 
-    public Product getProduct() {
-        return this.product;
+    public Products getProduct() {
+        return this.products;
     }
 
-    public void setProduct(Product product) {
-        this.product = product;
+    public void setProduct(Products products) {
+        this.products = products;
     }
 
     @Override

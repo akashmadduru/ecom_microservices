@@ -15,7 +15,7 @@ import java.time.LocalDateTime;
  * warranty details, and JSONB attributes.
  */
 @Entity
-@Table(name = "product_variants", indexes = {
+@Table(indexes = {
     @Index(name = "ix_product_variants_product_id", columnList = "product_id"),
     @Index(name = "idx_product_variants_hsn", columnList = "hsn_code")
 })
@@ -26,10 +26,10 @@ public class ProductVariant {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
 
-    @Column(name = "product_id", nullable = false)
+    @Column(nullable = false)
     private Integer productId;
 
-    @Column(nullable = false, length = 200, name = "variant_name")
+    @Column(nullable = false, length = 200)
     private String variantName;  // e.g., "Red / XL"
 
     @Column(length = 64)
@@ -41,49 +41,49 @@ public class ProductVariant {
     @Column(length = 64)
     private String ean;
 
-    @Column(name = "hsn_code", length = 16)
+    @Column(length = 16)
     private String hsnCode;
 
-    @Column(name = "gst_category", length = 40)
+    @Column(length = 40)
     private String gstCategory;
 
-    @Column(name = "country_of_origin", length = 2)
+    @Column(length = 2)
     private String countryOfOrigin;
 
     // Physical dimensions and shipping
-    @Column(name = "weight_grams")
+    @Column()
     private Integer weightGrams;
 
-    @Column(name = "length_mm")
+    @Column()
     private Integer lengthMm;
 
-    @Column(name = "width_mm")
+    @Column()
     private Integer widthMm;
 
-    @Column(name = "height_mm")
+    @Column()
     private Integer heightMm;
 
     @Column(nullable = false)
     private Boolean fragile = false;
 
-    @Column(name = "shipping_class", length = 40)
+    @Column(length = 40)
     private String shippingClass;
 
     // Warranty and expiry tracking
-    @Column(name = "manufacturer_warranty_months")
+    @Column()
     private Integer manufacturerWarrantyMonths;
 
-    @Column(nullable = false, name = "serial_number_required")
+    @Column(nullable = false)
     private Boolean serialNumberRequired = false;
 
-    @Column(nullable = false, name = "expiry_tracked")
+    @Column(nullable = false)
     private Boolean expiryTracked = false;
 
     // Attributes and status
     @Column(columnDefinition = "jsonb", nullable = false)
     private String attributes = "{}";
 
-    @Column(nullable = false, name = "is_default")
+    @Column(nullable = false)
     private Boolean isDefault = false;
 
     @Column(nullable = false, length = 20)
@@ -99,8 +99,8 @@ public class ProductVariant {
 
     // Relationship to Product
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "product_id", updatable = false, insertable = false)
-    private Product product;
+    @JoinColumn(updatable = false, insertable = false)
+    private Products products;
 
     public ProductVariant() {
     }
@@ -295,12 +295,12 @@ public class ProductVariant {
         this.updatedAt = updatedAt;
     }
 
-    public Product getProduct() {
-        return this.product;
+    public Products getProduct() {
+        return this.products;
     }
 
-    public void setProduct(Product product) {
-        this.product = product;
+    public void setProduct(Products products) {
+        this.products = products;
     }
 
     @Override

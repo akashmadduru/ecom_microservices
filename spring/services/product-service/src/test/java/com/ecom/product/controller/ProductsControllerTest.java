@@ -48,7 +48,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @WebMvcTest(ProductController.class)
 @ActiveProfiles("test")
 @DisplayName("ProductController Tests")
-class ProductControllerTest {
+class ProductsControllerTest {
     @Autowired
     private MockMvc mockMvc;
 

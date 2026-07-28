@@ -8,8 +8,7 @@ import com.ecom.common.pagination.Page;
 import com.ecom.common.pagination.PageRequest;
 import com.ecom.product.dto.ProductCreateRequest;
 import com.ecom.product.dto.ProductResponse;
-import com.ecom.product.dto.ProductUpdateRequest;
-import com.ecom.product.model.Product;
+import com.ecom.product.model.Products;
 import com.ecom.product.repository.ProductRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -36,7 +35,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -52,7 +50,7 @@ import static org.mockito.Mockito.when;
  */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("ProductService Tests")
-class ProductServiceTest {
+class ProductsServiceTest {
     @Mock
     private ProductRepository productRepository;
 
@@ -62,12 +60,12 @@ class ProductServiceTest {
     @InjectMocks
     private ProductService productService;
 
-    private Product testProduct;
+    private Products testProducts;
     private ProductCreateRequest createRequest;
 
     @BeforeEach
     void setUp() {
-        testProduct = Product.builder()
+        testProducts = Products.builder()
                 .id(1)
                 .title("Test Product")
                 .slug("test-product")
@@ -102,7 +100,7 @@ class ProductServiceTest {
     @DisplayName("Should create product successfully")
     void testCreateProduct() {
         when(productRepository.existsBySlug(anyString())).thenReturn(false);
-        when(productRepository.save(any(Product.class))).thenReturn(testProduct);
+        when(productRepository.save(any(Products.class))).thenReturn(testProducts);
 
         ProductResponse response = productService.createProduct(createRequest, "user123");
 
@@ -135,7 +133,7 @@ class ProductServiceTest {
     @Test
     @DisplayName("Should get published product for public user")
     void testGetProductPublic() {
-        when(productRepository.findById(1)).thenReturn(Optional.of(testProduct));
+        when(productRepository.findById(1)).thenReturn(Optional.of(testProducts));
 
         ProductResponse response = productService.getProductPublic(1);
 
@@ -146,8 +144,8 @@ class ProductServiceTest {
     @Test
     @DisplayName("Should throw NotFoundException for soft-deleted product")
     void testGetProductNotFound() {
-        testProduct.setIsDeleted(true);
-        when(productRepository.findById(1)).thenReturn(Optional.of(testProduct));
+        testProducts.setIsDeleted(true);
+        when(productRepository.findById(1)).thenReturn(Optional.of(testProducts));
 
         assertThatThrownBy(() -> productService.getProductPublic(1))
                 .isInstanceOf(NotFoundException.class)
@@ -157,12 +155,12 @@ class ProductServiceTest {
     @Test
     @DisplayName("Should soft-delete product successfully")
     void testSoftDeleteProduct() {
-        when(productRepository.findById(1)).thenReturn(Optional.of(testProduct));
-        when(productRepository.save(any(Product.class))).thenReturn(testProduct);
+        when(productRepository.findById(1)).thenReturn(Optional.of(testProducts));
+        when(productRepository.save(any(Products.class))).thenReturn(testProducts);
 
         productService.deleteProduct(1, "user123", "SELLER");
 
-        ArgumentCaptor<Product> captor = ArgumentCaptor.forClass(Product.class);
+        ArgumentCaptor<Products> captor = ArgumentCaptor.forClass(Products.class);
         verify(productRepository).save(captor.capture());
         assertThat(captor.getValue().getIsDeleted()).isTrue();
         assertThat(captor.getValue().getDeletedBy()).isEqualTo("user123");
@@ -171,8 +169,8 @@ class ProductServiceTest {
     @Test
     @DisplayName("Should enforce RBAC: seller cannot delete other's product")
     void testDeleteProductForbiddenForSeller() {
-        testProduct.setSellerId("other-user");
-        when(productRepository.findById(1)).thenReturn(Optional.of(testProduct));
+        testProducts.setSellerId("other-user");
+        when(productRepository.findById(1)).thenReturn(Optional.of(testProducts));
 
         assertThatThrownBy(() -> productService.deleteProduct(1, "user123", "SELLER"))
                 .isInstanceOf(ForbiddenException.class)
@@ -183,8 +181,8 @@ class ProductServiceTest {
     @DisplayName("Should list published products with pagination")
     void testListPublishedProducts() {
         PageRequest pageRequest = new PageRequest(1, 20);
-        org.springframework.data.domain.Page<Product> mockPage = new PageImpl<>(
-                List.of(testProduct)
+        org.springframework.data.domain.Page<Products> mockPage = new PageImpl<>(
+                List.of(testProducts)
         );
         when(productRepository.findAllPublished(any())).thenReturn(mockPage);
 
@@ -200,8 +198,8 @@ class ProductServiceTest {
     @DisplayName("Should search products with full-text query")
     void testSearchProducts() {
         PageRequest pageRequest = new PageRequest(1, 20);
-        org.springframework.data.domain.Page<Product> mockPage = new PageImpl<>(
-                List.of(testProduct)
+        org.springframework.data.domain.Page<Products> mockPage = new PageImpl<>(
+                List.of(testProducts)
         );
         when(productRepository.findByFullTextSearchPrefix(anyString(), any())).thenReturn(mockPage);
 

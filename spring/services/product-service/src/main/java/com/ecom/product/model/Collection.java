@@ -12,9 +12,7 @@ import java.time.LocalDateTime;
  * Collection: curated grouping of products (e.g., seasonal sales, featured items).
  */
 @Entity
-@Table(name = "collections", indexes = {
-    @Index(name = "idx_collection_slug", columnList = "slug")
-})
+@Table(indexes = {@Index(name = "idx_collection_slug", columnList = "slug")})
 @DynamicInsert
 @DynamicUpdate
 public class Collection {
@@ -31,13 +29,13 @@ public class Collection {
     @Column(columnDefinition = "text")
     private String description;
 
-    @Column(nullable = false, name = "is_active")
+    @Column(nullable = false)
     private Boolean isActive = true;
 
-    @Column(name = "starts_at")
+    @Column()
     private LocalDateTime startsAt;
 
-    @Column(name = "ends_at")
+    @Column()
     private LocalDateTime endsAt;
 
     @CreationTimestamp

@@ -32,5 +32,5 @@ CREATE TABLE product_images (
 
 CREATE INDEX ix_product_images_product_id ON product_images(product_id);
 CREATE INDEX ix_product_images_variant_id ON product_images(variant_id);
--- Unique constraint for PRIMARY image per product/variant (NULLs not distinct in PostgreSQL 15+)
+-- Unique constraint for PRIMARY image per products/variant (NULLs not distinct in PostgreSQL 15+)
 CREATE UNIQUE INDEX uq_product_images_primary ON product_images(product_id, variant_id) WHERE kind = 'PRIMARY';

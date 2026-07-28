@@ -23,9 +23,7 @@ import java.util.Map;
  * - Only enabled if Kafka is configured
  */
 @Configuration
-@ConditionalOnProperty(
-        name = "spring.kafka.bootstrap-servers",
-        havingValue = "")
+@ConditionalOnProperty(name = "spring.kafka.bootstrap-servers")
 public class KafkaConfig {
 
     @Bean

@@ -26,7 +26,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @SpringBootTest
 @ActiveProfiles("test")
 @DisplayName("ProductCreateRequest Validation Tests")
-class ProductCreateRequestTest {
+class ProductsCreateRequestTest {
     @Autowired
     private Validator validator;
 

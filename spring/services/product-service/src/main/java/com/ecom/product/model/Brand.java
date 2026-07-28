@@ -29,16 +29,16 @@ public class Brand {
     @Column(nullable = false, unique = true, length = 220)
     private String slug;
 
-    @Column(name = "logo_url", columnDefinition = "text")
+    @Column(columnDefinition = "text")
     private String logoUrl;
 
-    @Column(name = "manufacturer_id")
+    @Column()
     private Integer manufacturerId;
 
     @Column(columnDefinition = "text")
     private String description;
 
-    @Column(nullable = false, name = "is_active")
+    @Column(nullable = false)
     private Boolean isActive = true;
 
     @CreationTimestamp

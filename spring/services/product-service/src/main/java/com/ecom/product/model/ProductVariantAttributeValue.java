@@ -10,15 +10,15 @@ import jakarta.persistence.*;
  * AttributeValue records for "Red" (Color attribute) and "XL" (Size attribute).
  */
 @Entity
-@Table(name = "product_variant_attribute_values")
+@Table()
 @IdClass(ProductVariantAttributeValueId.class)
 public class ProductVariantAttributeValue {
     @Id
-    @Column(name = "variant_id")
+    @Column()
     private Integer variantId;
 
     @Id
-    @Column(name = "attribute_value_id")
+    @Column()
     private Integer attributeValueId;
 
     public ProductVariantAttributeValue() {

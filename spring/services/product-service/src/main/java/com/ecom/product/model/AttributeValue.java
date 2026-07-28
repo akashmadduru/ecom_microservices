@@ -7,16 +7,13 @@ import jakarta.persistence.*;
  * Example: For ProductAttribute(code="size"), this entity represents values like "S", "M", "L", "XL".
  */
 @Entity
-@Table(name = "attribute_values",
-uniqueConstraints = {
-    @UniqueConstraint(name = "uq_attribute_values_attribute_value", columnNames = {"attribute_id", "value"})
-})
+@Table()
 public class AttributeValue {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
 
-    @Column(name = "attribute_id", nullable = false)
+    @Column(nullable = false)
     private Integer attributeId;
 
     @Column(nullable = false, length = 150)
@@ -25,7 +22,7 @@ public class AttributeValue {
     @Column(nullable = false, length = 160)
     private String slug;
 
-    @Column(nullable = false, name = "sort_order")
+    @Column(nullable = false)
     private Integer sortOrder = 0;
 
     public AttributeValue() {

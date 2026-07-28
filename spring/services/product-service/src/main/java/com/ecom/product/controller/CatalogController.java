@@ -15,8 +15,8 @@ import com.ecom.product.repository.CategoryRepository;
 import com.ecom.product.repository.CollectionRepository;
 import com.ecom.product.repository.ManufacturerRepository;
 import com.ecom.product.repository.TagRepository;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -34,14 +34,23 @@ import java.util.List;
  */
 @RestController
 @RequestMapping("/api/v1/catalog")
-@RequiredArgsConstructor
-@Slf4j
 public class CatalogController {
+    private static final Logger log = LoggerFactory.getLogger(CatalogController.class);
     private final BrandRepository brandRepository;
     private final CategoryRepository categoryRepository;
     private final ManufacturerRepository manufacturerRepository;
     private final CollectionRepository collectionRepository;
     private final TagRepository tagRepository;
+
+    public CatalogController(BrandRepository brandRepository, CategoryRepository categoryRepository,
+                           ManufacturerRepository manufacturerRepository, CollectionRepository collectionRepository,
+                           TagRepository tagRepository) {
+        this.brandRepository = brandRepository;
+        this.categoryRepository = categoryRepository;
+        this.manufacturerRepository = manufacturerRepository;
+        this.collectionRepository = collectionRepository;
+        this.tagRepository = tagRepository;
+    }
 
     /**
      * GET /catalog/brands - List active brands.
@@ -159,55 +168,56 @@ public class CatalogController {
 
     // DTOs conversion helpers
     private BrandResponse toBrandResponse(Brand brand) {
-        return BrandResponse.builder()
-                .id(brand.getId())
-                .name(brand.getName())
-                .slug(brand.getSlug())
-                .logoUrl(brand.getLogoUrl())
-                .manufacturerId(brand.getManufacturerId())
-                .description(brand.getDescription())
-                .isActive(brand.getIsActive())
-                .build();
+        return new BrandResponse(
+                brand.getId(),
+                brand.getName(),
+                brand.getSlug(),
+                brand.getLogoUrl(),
+                brand.getManufacturerId(),
+                brand.getDescription(),
+                brand.getIsActive()
+        );
     }
 
     private CategoryResponse toCategoryResponse(Category category) {
-        return CategoryResponse.builder()
-                .id(category.getId())
-                .parentId(category.getParentId())
-                .name(category.getName())
-                .slug(category.getSlug())
-                .path(category.getPath())
-                .depth(category.getDepth())
-                .isActive(category.getIsActive())
-                .sortOrder(category.getSortOrder())
-                .build();
+        return new CategoryResponse(
+                category.getId(),
+                category.getParentId(),
+                category.getName(),
+                category.getSlug(),
+                category.getPath(),
+                category.getDepth(),
+                category.getIsActive(),
+                category.getSortOrder()
+        );
     }
 
     private ManufacturerResponse toManufacturerResponse(Manufacturer manufacturer) {
-        return ManufacturerResponse.builder()
-                .id(manufacturer.getId())
-                .name(manufacturer.getName())
-                .countryOfOrigin(manufacturer.getCountryOfOrigin())
-                .build();
+        return new ManufacturerResponse(
+                manufacturer.getId(),
+                manufacturer.getName(),
+                manufacturer.getCountryOfOrigin(),
+                null
+        );
     }
 
     private CollectionResponse toCollectionResponse(Collection collection) {
-        return CollectionResponse.builder()
-                .id(collection.getId())
-                .name(collection.getName())
-                .slug(collection.getSlug())
-                .description(collection.getDescription())
-                .isActive(collection.getIsActive())
-                .startsAt(collection.getStartsAt())
-                .endsAt(collection.getEndsAt())
-                .build();
+        return new CollectionResponse(
+                collection.getId(),
+                collection.getName(),
+                collection.getSlug(),
+                collection.getDescription(),
+                collection.getIsActive(),
+                collection.getStartsAt(),
+                collection.getEndsAt()
+        );
     }
 
     private TagResponse toTagResponse(Tag tag) {
-        return TagResponse.builder()
-                .id(tag.getId())
-                .name(tag.getName())
-                .slug(tag.getSlug())
-                .build();
+        return new TagResponse(
+                tag.getId(),
+                tag.getName(),
+                tag.getSlug()
+        );
     }
 }

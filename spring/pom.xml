@@ -26,16 +26,16 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <!--
-          Java 25 (LTS) for latest performance, virtual threads, and modern features.
+          Java 21 LTS is the standard for Spring Boot 3.3.
           Provides stable, long-term support with latest JVM optimizations.
-          Maven compiler targets Java 25 API/language surface.
+          Maven compiler targets Java 21 API/language surface.
 
           NOTE: Lombok 1.18.x incompatible with Java 21+ due to javac API changes.
           Using annotation processing disabled mode (-proc:none) with manual
           implementations for entities and DTOs. This is production-ready and
-          ensures reliability with Java 25.
+          ensures reliability with Java 21.
         -->
-        <maven.compiler.release>25</maven.compiler.release>
+        <maven.compiler.release>21</maven.compiler.release>
 
         <!-- Kept in lockstep with the Spring Boot BOM imported below so
              every module (this one now, services/* in later phases) shares
@@ -48,6 +48,28 @@
         <!-- Disable annotation processing for Java 25 compatibility -->
         <maven.compiler.proc>none</maven.compiler.proc>
     </properties>
+
+    <repositories>
+        <repository>
+            <id>spring-milestones</id>
+            <name>Spring Milestones</name>
+            <url>https://repo.spring.io/milestone</url>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
+        </repository>
+    </repositories>
+
+    <pluginRepositories>
+        <pluginRepository>
+            <id>spring-milestones</id>
+            <name>Spring Milestones</name>
+            <url>https://repo.spring.io/milestone</url>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
+        </pluginRepository>
+    </pluginRepositories>
 
     <dependencyManagement>
         <dependencies>

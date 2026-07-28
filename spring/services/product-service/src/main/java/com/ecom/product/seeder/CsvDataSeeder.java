@@ -1,16 +1,6 @@
 package com.ecom.product.seeder;
 
-import com.ecom.product.model.Brand;
-import com.ecom.product.model.Category;
-import com.ecom.product.model.Collection;
-import com.ecom.product.model.CollectionProduct;
-import com.ecom.product.model.Manufacturer;
-import com.ecom.product.model.Product;
-import com.ecom.product.model.ProductAttribute;
-import com.ecom.product.model.ProductImage;
-import com.ecom.product.model.ProductTag;
-import com.ecom.product.model.ProductVariant;
-import com.ecom.product.model.Tag;
+import com.ecom.product.model.*;
 import com.ecom.product.repository.BrandRepository;
 import com.ecom.product.repository.CategoryRepository;
 import com.ecom.product.repository.CollectionProductRepository;
@@ -22,8 +12,8 @@ import com.ecom.product.repository.ProductRepository;
 import com.ecom.product.repository.ProductTagRepository;
 import com.ecom.product.repository.ProductVariantRepository;
 import com.ecom.product.repository.TagRepository;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,10 +26,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
 
 /**
  * CsvDataSeeder: Loads product catalog data from CSV files.
@@ -52,9 +39,8 @@ import java.util.stream.Collectors;
  * - Batch inserts for performance
  */
 @Component
-@RequiredArgsConstructor
-@Slf4j
 public class CsvDataSeeder {
+	private static final Logger log = LoggerFactory.getLogger(CsvDataSeeder.class);
     private final ManufacturerRepository manufacturerRepository;
     private final BrandRepository brandRepository;
     private final CategoryRepository categoryRepository;
@@ -68,6 +54,30 @@ public class CsvDataSeeder {
     private final CollectionProductRepository collectionProductRepository;
 
     private static final int BATCH_SIZE = 50;
+
+    public CsvDataSeeder(ManufacturerRepository manufacturerRepository,
+                         BrandRepository brandRepository,
+                         CategoryRepository categoryRepository,
+                         CollectionRepository collectionRepository,
+                         TagRepository tagRepository,
+                         ProductRepository productRepository,
+                         ProductVariantRepository productVariantRepository,
+                         ProductImageRepository productImageRepository,
+                         ProductAttributeRepository productAttributeRepository,
+                         ProductTagRepository productTagRepository,
+                         CollectionProductRepository collectionProductRepository) {
+        this.manufacturerRepository = manufacturerRepository;
+        this.brandRepository = brandRepository;
+        this.categoryRepository = categoryRepository;
+        this.collectionRepository = collectionRepository;
+        this.tagRepository = tagRepository;
+        this.productRepository = productRepository;
+        this.productVariantRepository = productVariantRepository;
+        this.productImageRepository = productImageRepository;
+        this.productAttributeRepository = productAttributeRepository;
+        this.productTagRepository = productTagRepository;
+        this.collectionProductRepository = collectionProductRepository;
+    }
 
     @Transactional
     public void seedFromDirectory(String csvDirPath) throws IOException {
@@ -379,7 +389,7 @@ public class CsvDataSeeder {
         }
 
         log.info("Seeding products from {}", filePath);
-        List<Product> products = new ArrayList<>();
+        List<Products> products = new ArrayList<>();
 
         try (BufferedReader reader = Files.newBufferedReader(filePath, StandardCharsets.UTF_8)) {
             String line;
@@ -401,7 +411,7 @@ public class CsvDataSeeder {
                     continue;
                 }
 
-                Product product = new Product(title, slug);
+                Products product = new Products(title, slug);
                 product.setStatus("PUBLISHED");
                 product.setCreatedAt(LocalDateTime.now());
                 product.setUpdatedAt(LocalDateTime.now());

@@ -19,7 +19,7 @@ import java.util.List;
  * Carries relationships to variants and images.
  */
 @Entity
-@Table(name = "products", indexes = {
+@Table(indexes = {
     @Index(name = "ix_products_uniq_id", columnList = "uniq_id"),
     @Index(name = "ix_products_slug", columnList = "slug"),
     @Index(name = "ix_products_seller_id", columnList = "seller_id"),
@@ -31,12 +31,12 @@ import java.util.List;
 })
 @DynamicInsert
 @DynamicUpdate
-public class Product {
+public class Products {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
 
-    @Column(name = "uniq_id", unique = true, length = 64, columnDefinition = "text")
+    @Column(unique = true, length = 64, columnDefinition = "text")
     private String uniqId;
 
     @Column(nullable = false, columnDefinition = "text")
@@ -45,7 +45,7 @@ public class Product {
     @Column(nullable = false, unique = true, length = 320)
     private String slug;
 
-    @Column(name = "product_url", columnDefinition = "text")
+    @Column(columnDefinition = "text")
     private String productUrl;
 
     @Column(nullable = false, precision = 12, scale = 2)
@@ -54,7 +54,7 @@ public class Product {
     @Column(nullable = false, precision = 12, scale = 2)
     private BigDecimal discount = BigDecimal.ZERO;
 
-    @Column(name = "image_urls", columnDefinition = "text")
+    @Column(columnDefinition = "text")
     private String imageUrls;
 
     @Column(columnDefinition = "text")
@@ -64,7 +64,7 @@ public class Product {
     @Column(columnDefinition = "text")
     private String category;
 
-    @Column(name = "sub_category", columnDefinition = "text")
+    @Column(columnDefinition = "text")
     private String subCategory;
 
     @Column(columnDefinition = "text")
@@ -73,20 +73,20 @@ public class Product {
     @Column(nullable = false, precision = 3, scale = 2)
     private BigDecimal rating = BigDecimal.ZERO;
 
-    @Column(nullable = false, name = "review_count")
+    @Column(nullable = false)
     private Integer reviewCount = 0;
 
-    @Column(name = "seller_id", length = 64)
+    @Column(length = 64)
     private String sellerId;
 
     // Foreign keys to taxonomy
-    @Column(name = "brand_id")
+    @Column()
     private Integer brandId;
 
-    @Column(name = "manufacturer_id")
+    @Column()
     private Integer manufacturerId;
 
-    @Column(name = "category_id")
+    @Column()
     private Integer categoryId;
 
     // Product status and lifecycle
@@ -94,16 +94,16 @@ public class Product {
     private String status = "DRAFT";
 
     // SEO metadata
-    @Column(name = "seo_title", length = 255)
+    @Column(length = 255)
     private String seoTitle;
 
-    @Column(name = "seo_description", length = 500)
+    @Column(length = 500)
     private String seoDescription;
 
-    @Column(name = "canonical_url", columnDefinition = "text")
+    @Column(columnDefinition = "text")
     private String canonicalUrl;
 
-    @Column(name = "meta_keywords", columnDefinition = "text[]")
+    @Column(columnDefinition = "text[]")
     private String[] metaKeywords;
 
     // Spec attributes as JSONB
@@ -112,23 +112,23 @@ public class Product {
 
     // Computed full-text search column (PostgreSQL TSVECTOR)
     // This is maintained automatically by a trigger in the database.
-    @Column(name = "search_document", columnDefinition = "tsvector")
+    @Column(columnDefinition = "tsvector")
     private String searchDocument;
 
     // Audit and soft-delete
-    @Column(name = "created_by", length = 64)
+    @Column(length = 64)
     private String createdBy;
 
-    @Column(name = "updated_by", length = 64)
+    @Column(length = 64)
     private String updatedBy;
 
-    @Column(nullable = false, name = "is_deleted")
+    @Column(nullable = false)
     private Boolean isDeleted = false;
 
-    @Column(name = "deleted_at")
+    @Column()
     private LocalDateTime deletedAt;
 
-    @Column(name = "deleted_by", length = 64)
+    @Column(length = 64)
     private String deletedBy;
 
     @Column(nullable = false)
@@ -149,10 +149,9 @@ public class Product {
     @OneToMany(mappedBy = "product", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<ProductImage> images = new ArrayList<>();
 
-    public Product() {
-    }
+    public Products() {}
 
-    public Product(String title, String slug) {
+    public Products(String title, String slug) {
         this.title = title;
         this.slug = slug;
         this.status = "DRAFT";
@@ -230,6 +229,7 @@ public class Product {
     public List<ProductImage> getImages() { return this.images; }
     public void setImages(List<ProductImage> images) { this.images = images; }
 
+
     @Override
     public String toString() {
         return "Product{" +
@@ -266,5 +266,123 @@ public class Product {
                 ", createdAt=" + createdAt +
                 ", updatedAt=" + updatedAt +
                 '}';
+    }
+
+    public static ProductsBuilder builder() {
+        return new ProductsBuilder();
+    }
+
+    public static class ProductsBuilder {
+        private Integer id;
+        private String uniqId;
+        private String title;
+        private String slug;
+        private String productUrl;
+        private BigDecimal retailPrice;
+        private BigDecimal discount;
+        private String imageUrls;
+        private String description;
+        private String category;
+        private String subCategory;
+        private String brand;
+        private BigDecimal rating;
+        private Integer reviewCount;
+        private String sellerId;
+        private Integer brandId;
+        private Integer manufacturerId;
+        private Integer categoryId;
+        private String status;
+        private String seoTitle;
+        private String seoDescription;
+        private String canonicalUrl;
+        private String[] metaKeywords;
+        private String attributes;
+        private String searchDocument;
+        private String createdBy;
+        private String updatedBy;
+        private Boolean isDeleted;
+        private LocalDateTime deletedAt;
+        private String deletedBy;
+        private Integer version;
+        private LocalDateTime createdAt;
+        private LocalDateTime updatedAt;
+        private List<ProductVariant> variants;
+        private List<ProductImage> images;
+
+        public ProductsBuilder id(Integer id) { this.id = id; return this; }
+        public ProductsBuilder uniqId(String uniqId) { this.uniqId = uniqId; return this; }
+        public ProductsBuilder title(String title) { this.title = title; return this; }
+        public ProductsBuilder slug(String slug) { this.slug = slug; return this; }
+        public ProductsBuilder productUrl(String productUrl) { this.productUrl = productUrl; return this; }
+        public ProductsBuilder retailPrice(BigDecimal retailPrice) { this.retailPrice = retailPrice; return this; }
+        public ProductsBuilder discount(BigDecimal discount) { this.discount = discount; return this; }
+        public ProductsBuilder imageUrls(String imageUrls) { this.imageUrls = imageUrls; return this; }
+        public ProductsBuilder description(String description) { this.description = description; return this; }
+        public ProductsBuilder category(String category) { this.category = category; return this; }
+        public ProductsBuilder subCategory(String subCategory) { this.subCategory = subCategory; return this; }
+        public ProductsBuilder brand(String brand) { this.brand = brand; return this; }
+        public ProductsBuilder rating(BigDecimal rating) { this.rating = rating; return this; }
+        public ProductsBuilder reviewCount(Integer reviewCount) { this.reviewCount = reviewCount; return this; }
+        public ProductsBuilder sellerId(String sellerId) { this.sellerId = sellerId; return this; }
+        public ProductsBuilder brandId(Integer brandId) { this.brandId = brandId; return this; }
+        public ProductsBuilder manufacturerId(Integer manufacturerId) { this.manufacturerId = manufacturerId; return this; }
+        public ProductsBuilder categoryId(Integer categoryId) { this.categoryId = categoryId; return this; }
+        public ProductsBuilder status(String status) { this.status = status; return this; }
+        public ProductsBuilder seoTitle(String seoTitle) { this.seoTitle = seoTitle; return this; }
+        public ProductsBuilder seoDescription(String seoDescription) { this.seoDescription = seoDescription; return this; }
+        public ProductsBuilder canonicalUrl(String canonicalUrl) { this.canonicalUrl = canonicalUrl; return this; }
+        public ProductsBuilder metaKeywords(String[] metaKeywords) { this.metaKeywords = metaKeywords; return this; }
+        public ProductsBuilder attributes(String attributes) { this.attributes = attributes; return this; }
+        public ProductsBuilder searchDocument(String searchDocument) { this.searchDocument = searchDocument; return this; }
+        public ProductsBuilder createdBy(String createdBy) { this.createdBy = createdBy; return this; }
+        public ProductsBuilder updatedBy(String updatedBy) { this.updatedBy = updatedBy; return this; }
+        public ProductsBuilder isDeleted(Boolean isDeleted) { this.isDeleted = isDeleted; return this; }
+        public ProductsBuilder deletedAt(LocalDateTime deletedAt) { this.deletedAt = deletedAt; return this; }
+        public ProductsBuilder deletedBy(String deletedBy) { this.deletedBy = deletedBy; return this; }
+        public ProductsBuilder version(Integer version) { this.version = version; return this; }
+        public ProductsBuilder createdAt(LocalDateTime createdAt) { this.createdAt = createdAt; return this; }
+        public ProductsBuilder updatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; return this; }
+        public ProductsBuilder variants(List<ProductVariant> variants) { this.variants = variants; return this; }
+        public ProductsBuilder images(List<ProductImage> images) { this.images = images; return this; }
+
+        public Products build() {
+            Products products = new Products();
+            products.id = this.id;
+            products.uniqId = this.uniqId;
+            products.title = this.title;
+            products.slug = this.slug;
+            products.productUrl = this.productUrl;
+            products.retailPrice = this.retailPrice;
+            products.discount = this.discount;
+            products.imageUrls = this.imageUrls;
+            products.description = this.description;
+            products.category = this.category;
+            products.subCategory = this.subCategory;
+            products.brand = this.brand;
+            products.rating = this.rating;
+            products.reviewCount = this.reviewCount;
+            products.sellerId = this.sellerId;
+            products.brandId = this.brandId;
+            products.manufacturerId = this.manufacturerId;
+            products.categoryId = this.categoryId;
+            products.status = this.status;
+            products.seoTitle = this.seoTitle;
+            products.seoDescription = this.seoDescription;
+            products.canonicalUrl = this.canonicalUrl;
+            products.metaKeywords = this.metaKeywords;
+            products.attributes = this.attributes;
+            products.searchDocument = this.searchDocument;
+            products.createdBy = this.createdBy;
+            products.updatedBy = this.updatedBy;
+            products.isDeleted = this.isDeleted;
+            products.deletedAt = this.deletedAt;
+            products.deletedBy = this.deletedBy;
+            products.version = this.version;
+            products.createdAt = this.createdAt;
+            products.updatedAt = this.updatedAt;
+            products.variants = this.variants;
+            products.images = this.images;
+            return products;
+        }
     }
 }

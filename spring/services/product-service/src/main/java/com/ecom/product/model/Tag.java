@@ -6,7 +6,7 @@ import jakarta.persistence.*;
  * Tag: keyword tags for products (e.g., "eco-friendly", "bestseller", "on-sale").
  */
 @Entity
-@Table(name = "tags", indexes = {
+@Table(indexes = {
     @Index(name = "idx_tag_slug", columnList = "slug")
 })
 public class Tag {

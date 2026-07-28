@@ -1,7 +1,7 @@
 package com.ecom.product.seeder;
 
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
@@ -14,11 +14,15 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @ConditionalOnProperty(name = "app.seeding.enabled", havingValue = "true", matchIfMissing = false)
-@RequiredArgsConstructor
-@Slf4j
 public class SeederRunner implements CommandLineRunner {
+    private static final Logger log = LoggerFactory.getLogger(SeederRunner.class);
     private final CsvDataSeeder csvDataSeeder;
     private final SeederProperties seederProperties;
+
+    public SeederRunner(CsvDataSeeder csvDataSeeder, SeederProperties seederProperties) {
+        this.csvDataSeeder = csvDataSeeder;
+        this.seederProperties = seederProperties;
+    }
 
     @Override
     public void run(String... args) throws Exception {

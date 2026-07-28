@@ -6,19 +6,18 @@ import jakarta.persistence.*;
  * ProductTag: junction table for Product-Tag many-to-many relationship.
  */
 @Entity
-@Table(name = "product_tags")
+@Table()
 @IdClass(ProductTagId.class)
 public class ProductTag {
     @Id
-    @Column(name = "product_id")
+    @Column()
     private Integer productId;
 
     @Id
-    @Column(name = "tag_id")
+    @Column()
     private Integer tagId;
 
-    public ProductTag() {
-    }
+    public ProductTag() {}
 
     public ProductTag(Integer productId, Integer tagId) {
         this.productId = productId;
