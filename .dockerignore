@@ -7,7 +7,6 @@
 docker-compose*.infra.yml
 README.md
 Makefile
-deploy/
 docs/
 .gitattributes
 node_modules/

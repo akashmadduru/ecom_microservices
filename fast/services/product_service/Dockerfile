@@ -3,18 +3,18 @@ FROM python:3.12-slim AS builder
 COPY --from=ghcr.io/astral-sh/uv:0.7 /uv /usr/local/bin/uv
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=never
 WORKDIR /app
-COPY python/pyproject.toml python/uv.lock ./
-COPY python/libs ./libs
-COPY python/services/product_service ./services/product_service
-RUN uv sync --frozen --package product-service --no-dev --no-editable
+COPY fast/pyproject.toml ./
+COPY fast/libs ./libs
+COPY fast/services/product_service ./services/product_service
+RUN uv sync --package product-service --no-dev --no-editable
 
 FROM python:3.12-slim
 RUN useradd --create-home --uid 1000 appuser
 WORKDIR /app
 COPY --from=builder --chown=appuser:appuser /app/.venv /app/.venv
-COPY --chown=appuser:appuser python/services/product_service/alembic.ini /app/alembic.ini
-COPY --chown=appuser:appuser python/services/product_service/alembic /app/alembic
-COPY --chown=appuser:appuser python/services/product_service/seed /app/seed
+COPY --chown=appuser:appuser fast/services/product_service/alembic.ini /app/alembic.ini
+COPY --chown=appuser:appuser fast/services/product_service/alembic /app/alembic
+COPY --chown=appuser:appuser fast/services/product_service/seed /app/seed
 COPY --chown=appuser:appuser deploy/docker/entrypoint.sh /app/entrypoint.sh
 ENV PATH="/app/.venv/bin:$PATH"
 USER appuser
