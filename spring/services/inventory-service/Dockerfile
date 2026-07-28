@@ -1,4 +1,4 @@
-FROM maven:3.9-eclipse-temurin-25 AS builder
+FROM maven:3.9-eclipse-temurin-21 AS builder
 
 WORKDIR /build
 
@@ -9,14 +9,14 @@ COPY services/product-service/ services/product-service/
 COPY services/inventory-service/ services/inventory-service/
 COPY services/api-gateway/ services/api-gateway/
 
-RUN mvn clean package -DskipTests -pl services/inventory-service -am
+RUN mvn clean package -Dmaven.test.skip=true -pl services/inventory-service -am
 
-FROM eclipse-temurin:25-jre-alpine
+FROM eclipse-temurin:21-jre-alpine
 
 WORKDIR /app
 
 COPY --from=builder /build/services/inventory-service/target/inventory-service-*.jar app.jar
 
-EXPOSE 8083
+EXPOSE 8082
 
 ENTRYPOINT ["java", "-jar", "app.jar"]
