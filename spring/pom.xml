@@ -1,78 +1,30 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!--
-  Root (parent/aggregator) POM for the ecom-spring multi-module workspace.
-  Parallel to python/, vue/, and nuxt/ at the repo root — this is the Maven
-  workspace root for the Java/Spring migration. Per the updated plan,
-  product_service and inventory_service are NOW BEING MIGRATED from FastAPI to Spring Boot.
-
-  Phase 0: scaffolding + the shared library (libs/ecom-common-java)
-  Phase 1+: Product Service models, repositories, services
-  Phase 4+: Inventory Service models, repositories, Kafka integration
--->
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>com.ecom</groupId>
-    <artifactId>ecom-spring</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <artifactId>ecom-spring-parent</artifactId>
+    <version>1.0.0</version>
     <packaging>pom</packaging>
 
-    <name>ecom-spring</name>
-    <description>Java/Spring migration workspace: shared library plus (in later phases) the Reactive Spring Cloud Gateway and auth-service replacements for the Python api_gateway/auth_service.</description>
+    <name>ecom-spring-parent</name>
+    <description>Parent POM for ecommerce Spring Boot microservices</description>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-        <!--
-          Java 21 LTS is the standard for Spring Boot 3.3.
-          Provides stable, long-term support with latest JVM optimizations.
-          Maven compiler targets Java 21 API/language surface.
-
-          NOTE: Lombok 1.18.x incompatible with Java 21+ due to javac API changes.
-          Using annotation processing disabled mode (-proc:none) with manual
-          implementations for entities and DTOs. This is production-ready and
-          ensures reliability with Java 21.
-        -->
-        <maven.compiler.release>21</maven.compiler.release>
-
-        <!-- Kept in lockstep with the Spring Boot BOM imported below so
-             every module (this one now, services/* in later phases) shares
-             one version set for Jackson/Nimbus/Spring Security
-             Crypto/JUnit/AssertJ. -->
-        <spring-boot.version>3.3.4</spring-boot.version>
-        <spring-cloud.version>2023.0.3</spring-cloud.version>
-        <!-- Lombok kept for reference but annotation processing disabled -->
-        <lombok.version>1.18.32</lombok.version>
-        <!-- Disable annotation processing for Java 25 compatibility -->
-        <maven.compiler.proc>none</maven.compiler.proc>
+        <java.version>25</java.version>
+        <spring-boot.version>4.1.0</spring-boot.version>
+        <spring-cloud.version>2025.1.2</spring-cloud.version>
+        <maven.compiler.source>25</maven.compiler.source>
+        <maven.compiler.target>25</maven.compiler.target>
     </properties>
-
-    <repositories>
-        <repository>
-            <id>spring-milestones</id>
-            <name>Spring Milestones</name>
-            <url>https://repo.spring.io/milestone</url>
-            <snapshots>
-                <enabled>false</enabled>
-            </snapshots>
-        </repository>
-    </repositories>
-
-    <pluginRepositories>
-        <pluginRepository>
-            <id>spring-milestones</id>
-            <name>Spring Milestones</name>
-            <url>https://repo.spring.io/milestone</url>
-            <snapshots>
-                <enabled>false</enabled>
-            </snapshots>
-        </pluginRepository>
-    </pluginRepositories>
 
     <dependencyManagement>
         <dependencies>
+            <!-- Spring Boot BOM -->
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-dependencies</artifactId>
@@ -80,27 +32,14 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+
+            <!-- Spring Cloud BOM -->
             <dependency>
                 <groupId>org.springframework.cloud</groupId>
                 <artifactId>spring-cloud-dependencies</artifactId>
                 <version>${spring-cloud.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
-            </dependency>
-            <dependency>
-                <groupId>com.nimbusds</groupId>
-                <artifactId>nimbus-jose-jwt</artifactId>
-                <version>9.37.3</version>
-            </dependency>
-            <dependency>
-                <groupId>org.flywaydb</groupId>
-                <artifactId>flyway-core</artifactId>
-                <version>10.10.0</version>
-            </dependency>
-            <dependency>
-                <groupId>org.flywaydb</groupId>
-                <artifactId>flyway-database-postgresql</artifactId>
-                <version>10.10.0</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
@@ -109,36 +48,28 @@
         <pluginManagement>
             <plugins>
                 <plugin>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-maven-plugin</artifactId>
+                    <version>${spring-boot.version}</version>
+                </plugin>
+                <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-compiler-plugin</artifactId>
                     <version>3.13.0</version>
                     <configuration>
-                        <compilerArgs>
-                            <arg>-parameters</arg>
-                            <arg>-proc:${maven.compiler.proc}</arg>
-                        </compilerArgs>
-                        <!-- Annotation processors only enabled if Java 17 is detected and maven.compiler.proc=full -->
-                        <annotationProcessorPaths>
-                            <path>
-                                <groupId>org.projectlombok</groupId>
-                                <artifactId>lombok</artifactId>
-                                <version>${lombok.version}</version>
-                            </path>
-                        </annotationProcessorPaths>
+                        <source>${java.version}</source>
+                        <target>${java.version}</target>
                     </configuration>
-                </plugin>
-                <plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-surefire-plugin</artifactId>
-                    <version>3.5.1</version>
                 </plugin>
             </plugins>
         </pluginManagement>
+
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
     </build>
 
-    <modules>
-        <module>libs/ecom-common-java</module>
-        <module>services/auth-service</module>
-        <module>services/api-gateway</module>
-    </modules>
 </project>
