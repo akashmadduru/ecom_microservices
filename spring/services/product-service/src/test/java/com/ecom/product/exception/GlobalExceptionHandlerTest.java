@@ -26,7 +26,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * - Exception mapping to HTTP status codes
  * - Error response format
  */
-@WebMvcTest(TestExceptionController.class)
+@WebMvcTest(GlobalExceptionHandlerTest.TestExceptionController.class)
 @ActiveProfiles("test")
 @DisplayName("GlobalExceptionHandler Tests")
 class GlobalExceptionHandlerTest {

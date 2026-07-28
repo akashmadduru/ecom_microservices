@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   postgres:
     image: postgres:16-alpine
@@ -18,6 +16,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - ecom_network
 
   redis:
     image: redis:7-alpine
@@ -29,6 +29,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - ecom_network
 
   kafka:
     image: confluentinc/cp-kafka:7.5.0
@@ -49,6 +51,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - ecom_network
 
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.0
@@ -57,6 +61,8 @@ services:
       - "2181:2181"
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
+    networks:
+      - ecom_network
 
   auth-service:
     build:

@@ -3,6 +3,7 @@ package com.ecom.product.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Size;
+import lombok.Builder;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -12,6 +13,7 @@ import java.util.Map;
  * ProductUpdateRequest: DTO for updating an existing product.
  * Matches FastAPI ProductUpdate schema.
  */
+@Builder
 public class ProductUpdateRequest {
     @Size(min = 1, max = 500)
     private String title;

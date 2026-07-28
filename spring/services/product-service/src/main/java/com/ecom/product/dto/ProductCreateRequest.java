@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
+import lombok.Builder;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -13,6 +14,7 @@ import java.util.Map;
  * ProductCreateRequest: DTO for creating a new product.
  * Matches FastAPI ProductCreate schema.
  */
+@Builder
 public class ProductCreateRequest {
     @NotBlank(message = "Title is required")
     @Size(min = 1, max = 500)
