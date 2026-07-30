@@ -6,17 +6,17 @@
 set -euo pipefail
 
 # Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+SET RED='\033[0;31m'
+SET GREEN='\033[0;32m'
+SET YELLOW='\033[1;33m'
+SET BLUE='\033[0;34m'
+SET NC='\033[0m' # No Color
 
 # Configuration
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-DOCKER_COMPOSE_FILE="$PROJECT_DIR/docker-compose.yml"
-SQL_DIR="$SCRIPT_DIR/sql"
+SET SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SET PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+SET DOCKER_COMPOSE_FILE="$PROJECT_DIR/docker-compose.yml"
+SET SQL_DIR="$SCRIPT_DIR/sql"
 
 # Load environment variables
 if [ -f "$PROJECT_DIR/.env" ]; then
@@ -25,14 +25,14 @@ else
     echo -e "${YELLOW}Warning: .env file not found. Using defaults.${NC}"
 fi
 
-DB_USER="${DB_USER:-postgres}"
-DB_PASSWORD="${DB_PASSWORD:-postgres}"
-DB_HOST="${DB_HOST:-localhost}"
+SET DB_USER="${DB_USER:-postgres}"
+SET DB_PASSWORD="${DB_PASSWORD:-postgres}"
+SET DB_HOST="${DB_HOST:-localhost}"
 
 # Database connection parameters
-DATABASES=("auth_db" "products_db" "cart_db" "inventory_db")
-DB_PORTS=("5431" "5432" "5433" "5434")
-SQL_FILES=("01-auth_db.sql" "02-products_db.sql" "03-cart_db.sql" "04-inventory_db.sql")
+SET DATABASES=("auth_db" "products_db" "cart_db" "inventory_db")
+SET DB_PORTS=("5431" "5432" "5433" "5434")
+SET SQL_FILES=("01-auth_db.sql" "02-products_db.sql" "03-cart_db.sql" "04-inventory_db.sql")
 
 echo -e "${BLUE}=== E-commerce Microservices Database Initialization ===${NC}\n"
 

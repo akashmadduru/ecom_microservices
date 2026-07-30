@@ -1,13 +1,14 @@
 {
   "info": {
-    "_postman_id": "ecom-microservices-2024",
-    "name": "E-Commerce Microservices - Complete Test Suite",
-    "description": "Full test suite for event-driven microservices with authentication, products, cart, inventory, and monitoring",
+    "_postman_id": "ecom-microservices-spring-2025",
+    "name": "E-Commerce Microservices - Spring Boot Complete API",
+    "description": "Complete API test suite for Spring Boot microservices with authentication, products, cart, inventory, and monitoring",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
     {
-      "name": "1. Authentication (Auth Service)",
+      "name": "1. Authentication Service (Port 8082)",
+      "description": "JWT-based authentication with OAuth2 Google SSO support",
       "item": [
         {
           "name": "Signup - Create New User",
@@ -40,21 +41,12 @@
             "header": [
               {
                 "key": "Content-Type",
-                "value": "application/x-www-form-urlencoded"
+                "value": "application/json"
               }
             ],
             "body": {
-              "mode": "urlencoded",
-              "urlencoded": [
-                {
-                  "key": "username",
-                  "value": "test_user"
-                },
-                {
-                  "key": "password",
-                  "value": "password123"
-                }
-              ]
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"testuser\",\n  \"password\": \"TestPass123!\"\n}"
             },
             "url": {
               "raw": "http://localhost:8082/api/v1/auth/signin",
@@ -133,7 +125,7 @@
           "response": []
         },
         {
-          "name": "Logout (Current Session)",
+          "name": "Logout Current Session",
           "request": {
             "method": "POST",
             "header": [
@@ -173,14 +165,118 @@
             }
           },
           "response": []
+        },
+        {
+          "name": "SSO Google - Get Authorization URL",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8082/api/v1/auth/sso/google/authorize",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8082",
+              "path": ["api", "v1", "auth", "sso", "google", "authorize"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "SSO Google - Callback Handler",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8082/api/v1/auth/sso/google/callback?code=CODE_FROM_GOOGLE&state=STATE_VALUE",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8082",
+              "path": ["api", "v1", "auth", "sso", "google", "callback"],
+              "query": [
+                {
+                  "key": "code",
+                  "value": "CODE_FROM_GOOGLE"
+                },
+                {
+                  "key": "state",
+                  "value": "STATE_VALUE"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "SSO Login - Generic Provider",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"provider\": \"google\",\n  \"subject\": \"user-provider-id\",\n  \"email\": \"user@example.com\",\n  \"displayName\": \"User Display Name\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:8082/api/v1/auth/sso/login",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8082",
+              "path": ["api", "v1", "auth", "sso", "login"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "SSO Google Token Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"GOOGLE_ID_TOKEN\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:8082/api/v1/auth/sso/google",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8082",
+              "path": ["api", "v1", "auth", "sso", "google"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get User by ID (Internal)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8082/api/v1/auth/internal/users/user-id-here",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8082",
+              "path": ["api", "v1", "auth", "internal", "users", "user-id-here"]
+            }
+          },
+          "response": []
         }
       ]
     },
     {
-      "name": "2. Products Service (CRUD)",
+      "name": "2. Products Service (Port 8083)",
+      "description": "Product catalog management with pagination support",
       "item": [
         {
-          "name": "List All Products",
+          "name": "Get All Products",
           "request": {
             "method": "GET",
             "header": [],
@@ -195,16 +291,41 @@
           "response": []
         },
         {
+          "name": "Get Products with Pagination",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8083/api/v1/products/page?page=0&size=20",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8083",
+              "path": ["api", "v1", "products", "page"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "20"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
           "name": "Get Product by ID",
           "request": {
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "http://localhost:8083/api/v1/products/123e4567-e89b-12d3-a456-426614174000",
+              "raw": "http://localhost:8083/api/v1/products/1",
               "protocol": "http",
               "host": ["localhost"],
               "port": "8083",
-              "path": ["api", "v1", "products", "123e4567-e89b-12d3-a456-426614174000"]
+              "path": ["api", "v1", "products", "1"]
             }
           },
           "response": []
@@ -226,7 +347,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"New Laptop\",\n  \"description\": \"High-performance laptop for professionals\",\n  \"price\": 1299.99,\n  \"stock\": 25\n}"
+              "raw": "{\n  \"name\": \"High-Performance Laptop\",\n  \"description\": \"Professional laptop for developers and designers\",\n  \"price\": 1299.99,\n  \"stock\": 50,\n  \"category\": \"Electronics\",\n  \"sku\": \"LAPTOP-001\"\n}"
             },
             "url": {
               "raw": "http://localhost:8083/api/v1/products",
@@ -255,14 +376,14 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Updated Laptop\",\n  \"description\": \"Updated description\",\n  \"price\": 1199.99,\n  \"stock\": 20\n}"
+              "raw": "{\n  \"name\": \"Premium Laptop\",\n  \"description\": \"Updated description\",\n  \"price\": 1399.99,\n  \"stock\": 45,\n  \"category\": \"Electronics\",\n  \"sku\": \"LAPTOP-001\"\n}"
             },
             "url": {
-              "raw": "http://localhost:8083/api/v1/products/123e4567-e89b-12d3-a456-426614174000",
+              "raw": "http://localhost:8083/api/v1/products/1",
               "protocol": "http",
               "host": ["localhost"],
               "port": "8083",
-              "path": ["api", "v1", "products", "123e4567-e89b-12d3-a456-426614174000"]
+              "path": ["api", "v1", "products", "1"]
             }
           },
           "response": []
@@ -279,11 +400,11 @@
               }
             ],
             "url": {
-              "raw": "http://localhost:8083/api/v1/products/123e4567-e89b-12d3-a456-426614174000",
+              "raw": "http://localhost:8083/api/v1/products/1",
               "protocol": "http",
               "host": ["localhost"],
               "port": "8083",
-              "path": ["api", "v1", "products", "123e4567-e89b-12d3-a456-426614174000"]
+              "path": ["api", "v1", "products", "1"]
             }
           },
           "response": []
@@ -291,10 +412,11 @@
       ]
     },
     {
-      "name": "3. Cart Service (Event Producer)",
+      "name": "3. Cart Service (Port 8084)",
+      "description": "Shopping cart management with event-driven architecture",
       "item": [
         {
-          "name": "Get Cart (or Create)",
+          "name": "Get Cart for User",
           "request": {
             "method": "GET",
             "header": [
@@ -305,17 +427,17 @@
               }
             ],
             "url": {
-              "raw": "http://localhost:8084/api/v1/carts/user123",
+              "raw": "http://localhost:8084/api/v1/carts/user-id-here",
               "protocol": "http",
               "host": ["localhost"],
               "port": "8084",
-              "path": ["api", "v1", "carts", "user123"]
+              "path": ["api", "v1", "carts", "user-id-here"]
             }
           },
           "response": []
         },
         {
-          "name": "Add Item to Cart (TRIGGERS EVENT)",
+          "name": "Add Item to Cart",
           "request": {
             "method": "POST",
             "header": [
@@ -331,14 +453,14 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"product_id\": \"123e4567-e89b-12d3-a456-426614174000\",\n  \"quantity\": 2,\n  \"price\": 299.99\n}"
+              "raw": "{\n  \"product_id\": 1,\n  \"quantity\": 2,\n  \"price\": 299.99\n}"
             },
             "url": {
-              "raw": "http://localhost:8084/api/v1/carts/user123/items",
+              "raw": "http://localhost:8084/api/v1/carts/user-id-here/items",
               "protocol": "http",
               "host": ["localhost"],
               "port": "8084",
-              "path": ["api", "v1", "carts", "user123", "items"]
+              "path": ["api", "v1", "carts", "user-id-here", "items"]
             }
           },
           "response": []
@@ -360,20 +482,26 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"quantity\": 5\n}"
+              "raw": ""
             },
             "url": {
-              "raw": "http://localhost:8084/api/v1/carts/user123/items/item-uuid-here",
+              "raw": "http://localhost:8084/api/v1/carts/1/items/1?quantity=5",
               "protocol": "http",
               "host": ["localhost"],
               "port": "8084",
-              "path": ["api", "v1", "carts", "user123", "items", "item-uuid-here"]
+              "path": ["api", "v1", "carts", "1", "items", "1"],
+              "query": [
+                {
+                  "key": "quantity",
+                  "value": "5"
+                }
+              ]
             }
           },
           "response": []
         },
         {
-          "name": "Remove Item from Cart (TRIGGERS EVENT)",
+          "name": "Remove Item from Cart",
           "request": {
             "method": "DELETE",
             "header": [
@@ -384,17 +512,17 @@
               }
             ],
             "url": {
-              "raw": "http://localhost:8084/api/v1/carts/user123/items/item-uuid-here",
+              "raw": "http://localhost:8084/api/v1/carts/user-id-here/items/1",
               "protocol": "http",
               "host": ["localhost"],
               "port": "8084",
-              "path": ["api", "v1", "carts", "user123", "items", "item-uuid-here"]
+              "path": ["api", "v1", "carts", "user-id-here", "items", "1"]
             }
           },
           "response": []
         },
         {
-          "name": "Checkout (TRIGGERS EVENT)",
+          "name": "Checkout Cart",
           "request": {
             "method": "POST",
             "header": [
@@ -410,14 +538,14 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"shipping_address\": \"123 Main St, City, State 12345\",\n  \"payment_method\": \"credit_card\"\n}"
+              "raw": ""
             },
             "url": {
-              "raw": "http://localhost:8084/api/v1/carts/user123/checkout",
+              "raw": "http://localhost:8084/api/v1/carts/user-id-here/checkout",
               "protocol": "http",
               "host": ["localhost"],
               "port": "8084",
-              "path": ["api", "v1", "carts", "user123", "checkout"]
+              "path": ["api", "v1", "carts", "user-id-here", "checkout"]
             }
           },
           "response": []
@@ -425,10 +553,11 @@
       ]
     },
     {
-      "name": "4. Inventory Service (Event Consumer)",
+      "name": "4. Inventory Service (Port 8085)",
+      "description": "Stock management with event-driven reservation system",
       "item": [
         {
-          "name": "Get Stock Level",
+          "name": "Get Inventory for Product",
           "request": {
             "method": "GET",
             "header": [
@@ -439,11 +568,11 @@
               }
             ],
             "url": {
-              "raw": "http://localhost:8085/api/v1/inventory/123e4567-e89b-12d3-a456-426614174000",
+              "raw": "http://localhost:8085/api/v1/inventory/1",
               "protocol": "http",
               "host": ["localhost"],
               "port": "8085",
-              "path": ["api", "v1", "inventory", "123e4567-e89b-12d3-a456-426614174000"]
+              "path": ["api", "v1", "inventory", "1"]
             }
           },
           "response": []
@@ -460,40 +589,42 @@
               }
             ],
             "url": {
-              "raw": "http://localhost:8085/api/v1/inventory/reserved/user123",
+              "raw": "http://localhost:8085/api/v1/inventory/reserved/user-id-here",
               "protocol": "http",
               "host": ["localhost"],
               "port": "8085",
-              "path": ["api", "v1", "inventory", "reserved", "user123"]
+              "path": ["api", "v1", "inventory", "reserved", "user-id-here"]
             }
           },
           "response": []
         },
         {
-          "name": "Manually Reserve Stock",
+          "name": "Manual Reservation Release",
           "request": {
             "method": "PUT",
             "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
               {
                 "key": "Authorization",
                 "value": "Bearer {{access_token}}",
                 "type": "text"
               }
             ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"user_id\": \"user123\",\n  \"quantity\": 3\n}"
-            },
             "url": {
-              "raw": "http://localhost:8085/api/v1/inventory/123e4567-e89b-12d3-a456-426614174000/reserve",
+              "raw": "http://localhost:8085/api/v1/inventory/1/reserve?userId=user-id-here&quantity=3",
               "protocol": "http",
               "host": ["localhost"],
               "port": "8085",
-              "path": ["api", "v1", "inventory", "123e4567-e89b-12d3-a456-426614174000", "reserve"]
+              "path": ["api", "v1", "inventory", "1", "reserve"],
+              "query": [
+                {
+                  "key": "userId",
+                  "value": "user-id-here"
+                },
+                {
+                  "key": "quantity",
+                  "value": "3"
+                }
+              ]
             }
           },
           "response": []
@@ -501,10 +632,11 @@
       ]
     },
     {
-      "name": "5. Monitoring & Health",
+      "name": "5. Health & Monitoring",
+      "description": "Service health checks and metrics collection",
       "item": [
         {
-          "name": "Auth Service - Health Check",
+          "name": "Auth Service - Health",
           "request": {
             "method": "GET",
             "header": [],
@@ -519,7 +651,7 @@
           "response": []
         },
         {
-          "name": "Products Service - Health Check",
+          "name": "Products Service - Health",
           "request": {
             "method": "GET",
             "header": [],
@@ -534,7 +666,7 @@
           "response": []
         },
         {
-          "name": "Cart Service - Health Check",
+          "name": "Cart Service - Health",
           "request": {
             "method": "GET",
             "header": [],
@@ -549,7 +681,7 @@
           "response": []
         },
         {
-          "name": "Inventory Service - Health Check",
+          "name": "Inventory Service - Health",
           "request": {
             "method": "GET",
             "header": [],
@@ -564,7 +696,37 @@
           "response": []
         },
         {
-          "name": "Cart Service - Metrics (Prometheus)",
+          "name": "Auth Service - Metrics (Prometheus)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8082/actuator/prometheus",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8082",
+              "path": ["actuator", "prometheus"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Products Service - Metrics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8083/actuator/prometheus",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8083",
+              "path": ["actuator", "prometheus"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Cart Service - Metrics",
           "request": {
             "method": "GET",
             "header": [],
@@ -579,66 +741,16 @@
           "response": []
         },
         {
-          "name": "Cart Service - Circuit Breaker Status",
+          "name": "Inventory Service - Metrics",
           "request": {
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "http://localhost:8084/actuator/circuitbreakers",
+              "raw": "http://localhost:8085/actuator/prometheus",
               "protocol": "http",
               "host": ["localhost"],
-              "port": "8084",
-              "path": ["actuator", "circuitbreakers"]
-            }
-          },
-          "response": []
-        }
-      ]
-    },
-    {
-      "name": "6. Dashboard Access",
-      "item": [
-        {
-          "name": "Grafana - Service Health Dashboard",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "http://localhost:3000/d/service-health",
-              "protocol": "http",
-              "host": ["localhost"],
-              "port": "3000",
-              "path": ["d", "service-health"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Grafana - Business Metrics Dashboard",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "http://localhost:3000/d/business-metrics",
-              "protocol": "http",
-              "host": ["localhost"],
-              "port": "3000",
-              "path": ["d", "business-metrics"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Grafana - Resource Utilization Dashboard",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "http://localhost:3000/d/resource-utilization",
-              "protocol": "http",
-              "host": ["localhost"],
-              "port": "3000",
-              "path": ["d", "resource-utilization"]
+              "port": "8085",
+              "path": ["actuator", "prometheus"]
             }
           },
           "response": []
@@ -657,6 +769,45 @@
             }
           },
           "response": []
+        },
+        {
+          "name": "Grafana - Dashboards",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/d/service-health",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["d", "service-health"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "6. Quick Test Flows",
+      "description": "Sample workflows for testing end-to-end scenarios",
+      "item": [
+        {
+          "name": "Flow: Complete User Journey",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "1. Signup → 2. Signin → 3. View Products → 4. Add to Cart → 5. Checkout\nSee folder items for individual steps"
+          },
+          "response": []
+        },
+        {
+          "name": "Flow: Product Catalog Browse",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "1. Get all products → 2. Get product details → 3. Check inventory"
+          },
+          "response": []
         }
       ]
     }
@@ -664,16 +815,21 @@
   "variable": [
     {
       "key": "access_token",
-      "value": "your-jwt-access-token-here",
+      "value": "paste-your-jwt-token-here",
       "type": "string"
     },
     {
       "key": "refresh_token",
-      "value": "your-jwt-refresh-token-here",
+      "value": "paste-your-refresh-token-here",
       "type": "string"
     },
     {
       "key": "base_url",
+      "value": "http://localhost",
+      "type": "string"
+    },
+    {
+      "key": "api_gateway_url",
       "value": "http://localhost:8080",
       "type": "string"
     }

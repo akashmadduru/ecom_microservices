@@ -33,6 +33,12 @@
 			<artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
 		</dependency>
 
+		<!-- OpenFeign for service-to-service communication -->
+		<dependency>
+			<groupId>org.springframework.cloud</groupId>
+			<artifactId>spring-cloud-starter-openfeign</artifactId>
+		</dependency>
+
 		<!-- JWT Token Verification -->
 		<dependency>
 			<groupId>io.jsonwebtoken</groupId>

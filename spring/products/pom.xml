@@ -11,7 +11,6 @@
 
 	<artifactId>products</artifactId>
 	<name>products</name>
-
 	<description>Products microservice</description>
 
 	<dependencies>
@@ -48,6 +47,18 @@
 		<dependency>
 			<groupId>org.springframework.cloud</groupId>
 			<artifactId>spring-cloud-stream-binder-kafka</artifactId>
+		</dependency>
+
+		<!-- OpenFeign for service-to-service communication -->
+		<dependency>
+			<groupId>org.springframework.cloud</groupId>
+			<artifactId>spring-cloud-starter-openfeign</artifactId>
+		</dependency>
+
+		<!-- Service Discovery -->
+		<dependency>
+			<groupId>org.springframework.cloud</groupId>
+			<artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
 		</dependency>
 
 		<!-- Util -->

@@ -8,8 +8,6 @@ import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -21,14 +19,16 @@ import java.util.UUID;
 import java.util.regex.Pattern;
 
 @Service
-@Slf4j
-@RequiredArgsConstructor
 public class SecurityService {
     private final AuthProperties authProperties;
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     private static final Pattern PASSWORD_PATTERN =
         Pattern.compile("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[^A-Za-z0-9]).{8,}$");
+
+    public SecurityService(AuthProperties authProperties) {
+        this.authProperties = authProperties;
+    }
 
     /**
      * Create an access token for the given user.

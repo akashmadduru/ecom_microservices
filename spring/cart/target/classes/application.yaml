@@ -29,6 +29,29 @@ spring:
         cartEventProducer-out-0:
           destination: cart-events
 
+    # Eureka Client for service discovery
+    client:
+      register-with-eureka: true
+      fetch-registry: true
+      service-url:
+        defaultZone: ${EUREKA_SERVER_URL:http://localhost:8761/eureka}
+
+# Feign client configuration
+feign:
+  client:
+    config:
+      default:
+        connectTimeout: 3000
+        readTimeout: 3000
+        loggerLevel: BASIC
+    circuitbreaker:
+      enabled: true
+    compression:
+      request:
+        enabled: true
+      response:
+        enabled: true
+
 server:
   port: 8084
   servlet:
@@ -38,7 +61,30 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,metrics,prometheus,circuitbreakers
   endpoint:
     health:
       show-details: when-authorized
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+  health:
+    circuitbreakers:
+      enabled: true
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      products-getProduct:
+        failure-rate-threshold: 50
+        slow-call-rate-threshold: 50
+        slow-call-duration-threshold: 2000ms
+        wait-duration-in-open-state: 30000ms
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        recordable-exceptions:
+          - java.io.IOException
+          - org.springframework.web.client.HttpClientErrorException
+        ignore-exceptions:
+          - java.lang.IllegalArgumentException

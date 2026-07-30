@@ -26,8 +26,64 @@ spring:
         binder:
           brokers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
       bindings:
+        # Cart service saga event bindings
+        checkoutInitiatedEventProducer-out-0:
+          destination: checkout-initiated
+          producer:
+            partition-key-expression: headers['sagaId']
+        inventoryReservedEventConsumer-in-0:
+          destination: inventory-reserved
+          group: cart-checkout-saga
+          consumer:
+            startOffset: latest
+        inventoryReservationFailedEventConsumer-in-0:
+          destination: inventory-failed
+          group: cart-checkout-saga
+          consumer:
+            startOffset: latest
+        checkoutCompletedEventProducer-out-0:
+          destination: checkout-completed
+          producer:
+            partition-key-expression: headers['sagaId']
+        checkoutFailedEventProducer-out-0:
+          destination: checkout-failed
+          producer:
+            partition-key-expression: headers['sagaId']
+        checkoutCompensatingEventProducer-out-0:
+          destination: compensation-triggered
+          producer:
+            partition-key-expression: headers['sagaId']
+        checkoutCompensatedEventConsumer-in-0:
+          destination: compensation-completed
+          group: cart-checkout-saga
+          consumer:
+            startOffset: latest
+        # Original cart events
         cartEventProducer-out-0:
           destination: cart-events
+
+    # Eureka Client for service discovery
+    client:
+      register-with-eureka: true
+      fetch-registry: true
+      service-url:
+        defaultZone: ${EUREKA_SERVER_URL:http://localhost:8761/eureka}
+
+# Feign client configuration
+feign:
+  client:
+    config:
+      default:
+        connectTimeout: 3000
+        readTimeout: 3000
+        loggerLevel: BASIC
+    circuitbreaker:
+      enabled: true
+    compression:
+      request:
+        enabled: true
+      response:
+        enabled: true
 
 server:
   port: 8084

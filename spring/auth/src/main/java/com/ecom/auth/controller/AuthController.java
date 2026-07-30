@@ -4,8 +4,6 @@ import com.ecom.auth.dto.*;
 import com.ecom.auth.service.AuthService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -16,10 +14,12 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1/auth")
-@RequiredArgsConstructor
-@Slf4j
 public class AuthController {
     private final AuthService authService;
+
+    public AuthController(AuthService authService) {
+        this.authService = authService;
+    }
 
     @PostMapping("/signup")
     public ResponseEntity<UserResponse> signup(@Valid @RequestBody UserSignupRequest request) {
@@ -31,7 +31,7 @@ public class AuthController {
     public ResponseEntity<TokenPairResponse> signin(
         @Valid @RequestBody SigninRequest request,
         HttpServletRequest httpRequest) {
-        UserResponse user = authService.authenticate(request.getUsername(), request.getPassword());
+        UserResponse user = authService.authenticate(request.username(), request.password());
         TokenPairResponse tokens = authService.issuePair(
             convertToUserEntity(user),
             httpRequest.getHeader("User-Agent")
@@ -41,7 +41,7 @@ public class AuthController {
 
     @PostMapping("/token/refresh")
     public ResponseEntity<TokenPairResponse> refreshTokens(@Valid @RequestBody RefreshTokenRequest request) {
-        TokenPairResponse tokens = authService.refreshTokens(request.getRefreshToken());
+        TokenPairResponse tokens = authService.refreshTokens(request.refreshToken());
         return ResponseEntity.ok(tokens);
     }
 
@@ -65,7 +65,7 @@ public class AuthController {
     public ResponseEntity<TokenPairResponse> ssoGoogleLogin(
         @Valid @RequestBody GoogleLoginRequest request,
         HttpServletRequest httpRequest) {
-        UserResponse user = authService.ssoGoogleLogin(request.getToken());
+        UserResponse user = authService.ssoGoogleLogin(request.token());
         TokenPairResponse tokens = authService.issuePair(
             convertToUserEntity(user),
             httpRequest.getHeader("User-Agent")
@@ -108,7 +108,7 @@ public class AuthController {
     public ResponseEntity<UserResponse> validateToken(@RequestHeader("Authorization") String authHeader) {
         String token = extractToken(authHeader);
         TokenPayload payload = authService.validateToken(token);
-        UserResponse user = authService.getUser(payload.getSub());
+        UserResponse user = authService.getUser(payload.sub());
         return ResponseEntity.ok(user);
     }
 
@@ -116,7 +116,7 @@ public class AuthController {
     public ResponseEntity<UserResponse> getCurrentUser(@RequestHeader("Authorization") String authHeader) {
         String token = extractToken(authHeader);
         TokenPayload payload = authService.validateToken(token);
-        UserResponse user = authService.getUser(payload.getSub());
+        UserResponse user = authService.getUser(payload.sub());
         return ResponseEntity.ok(user);
     }
 
@@ -135,12 +135,12 @@ public class AuthController {
 
     private com.ecom.auth.domain.User convertToUserEntity(UserResponse userResponse) {
         return com.ecom.auth.domain.User.builder()
-            .id(userResponse.getId())
-            .username(userResponse.getUsername())
-            .email(userResponse.getEmail())
-            .role(userResponse.getRole())
-            .provider(userResponse.getProvider())
-            .isActive(userResponse.getIsActive())
+            .id(userResponse.id())
+            .username(userResponse.username())
+            .email(userResponse.email())
+            .role(userResponse.role())
+            .provider(userResponse.provider())
+            .isActive(userResponse.isActive())
             .build();
     }
 }
