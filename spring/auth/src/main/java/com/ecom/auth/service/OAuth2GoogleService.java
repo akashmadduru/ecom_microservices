@@ -3,6 +3,8 @@ package com.ecom.auth.service;
 import com.ecom.auth.config.AuthProperties;
 import com.ecom.auth.exception.UnauthorizedException;
 import com.google.auth.oauth2.TokenVerifier;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -13,9 +15,11 @@ import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.util.*;
 
+
+@Slf4j
 @Service
+@RequiredArgsConstructor
 public class OAuth2GoogleService {
-    private static final Logger log = LoggerFactory.getLogger(OAuth2GoogleService.class);
 
     private final AuthProperties authProperties;
     private final SessionService sessionService;
@@ -24,13 +28,8 @@ public class OAuth2GoogleService {
     private static final String GOOGLE_AUTH_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth";
     private static final String GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
     private static final String GOOGLE_CERTS_ENDPOINT = "https://www.googleapis.com/oauth2/v1/certs";
-    private static final int STATE_TTL_SECONDS = 600;
 
-    public OAuth2GoogleService(AuthProperties authProperties, SessionService sessionService, WebClient.Builder webClientBuilder) {
-        this.authProperties = authProperties;
-        this.sessionService = sessionService;
-        this.webClientBuilder = webClientBuilder;
-    }
+    private static final int STATE_TTL_SECONDS = 600;
 
     /**
      * Generate the authorization URL for the OAuth2 authorization-code flow.

@@ -8,6 +8,8 @@ import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -18,17 +20,18 @@ import java.util.Date;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
+
+@Slf4j
 @Service
+@RequiredArgsConstructor
 public class SecurityService {
+
     private final AuthProperties authProperties;
+
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     private static final Pattern PASSWORD_PATTERN =
         Pattern.compile("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[^A-Za-z0-9]).{8,}$");
-
-    public SecurityService(AuthProperties authProperties) {
-        this.authProperties = authProperties;
-    }
 
     /**
      * Create an access token for the given user.
@@ -37,7 +40,7 @@ public class SecurityService {
     public String[] createAccessToken(String userId, String email, String username, String role, String sid) {
         String jti = UUID.randomUUID().toString();
         Instant now = Instant.now();
-        long expirySeconds = authProperties.getAccessTokenExpireMinutes() * 60;
+        long expirySeconds = authProperties.getAccessTokenExpireMinutes() * 60L;
 
         String token = Jwts.builder()
             .subject(userId)

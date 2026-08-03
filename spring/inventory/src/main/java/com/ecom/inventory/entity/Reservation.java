@@ -35,7 +35,7 @@ public class Reservation {
 	@Column(nullable = false)
 	private LocalDateTime expiresAt;
 
-	@Column(name = "is_released")
+	@Column()
 	private Boolean isReleased;
 
 	@PrePersist

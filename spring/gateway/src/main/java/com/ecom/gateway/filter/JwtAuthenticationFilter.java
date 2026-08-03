@@ -4,6 +4,8 @@ import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -18,10 +20,10 @@ import javax.crypto.SecretKey;
 import java.util.Arrays;
 import java.util.List;
 
+@Slf4j
 @Component
+@RequiredArgsConstructor
 public class JwtAuthenticationFilter extends AbstractGatewayFilterFactory<JwtAuthenticationFilter.Config> {
-
-    private static final Logger logger = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
 
     @Value("${auth.jwt-secret:your-secret-key-change-in-production-min-256-bits-long-key-here-make-it-secure}")
     private String jwtSecret;
@@ -45,10 +47,6 @@ public class JwtAuthenticationFilter extends AbstractGatewayFilterFactory<JwtAut
         "/v3/api-docs"
     );
 
-    public JwtAuthenticationFilter() {
-        super(Config.class);
-    }
-
     @Override
     public GatewayFilter apply(Config config) {
         return (exchange, chain) -> {
@@ -60,7 +58,7 @@ public class JwtAuthenticationFilter extends AbstractGatewayFilterFactory<JwtAut
 
             String token = extractToken(exchange);
             if (token == null || token.isEmpty()) {
-                logger.debug("Missing token for path: {}", path);
+                log.debug("Missing token for path: {}", path);
                 exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
                 return exchange.getResponse().setComplete();
             }
@@ -81,7 +79,7 @@ public class JwtAuthenticationFilter extends AbstractGatewayFilterFactory<JwtAut
 
                 return chain.filter(modifiedExchange);
             } catch (JwtException | IllegalArgumentException e) {
-                logger.debug("Token validation failed: {}", e.getMessage());
+                log.debug("Token validation failed: {}", e.getMessage());
                 exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
                 return exchange.getResponse().setComplete();
             }

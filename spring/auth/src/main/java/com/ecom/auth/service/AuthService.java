@@ -1,6 +1,7 @@
 package com.ecom.auth.service;
 
 import com.ecom.auth.config.AuthProperties;
+import com.ecom.auth.constant.ROLE;
 import com.ecom.auth.domain.User;
 import com.ecom.auth.dto.*;
 import com.ecom.auth.exception.*;
@@ -11,7 +12,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Instant;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -39,7 +39,7 @@ public class AuthService {
      */
     @Transactional
     public UserResponse register(UserSignupRequest request) {
-        String normalizedUsername = securityService.normalizeUsername(request.username());
+        String normalizedUsername = securityService.normalizeUsername(request.getUsername());
 
         // Validate username length after normalization
         if (normalizedUsername.length() < 3) {
@@ -47,7 +47,7 @@ public class AuthService {
         }
 
         // Validate password strength
-        if (!securityService.isPasswordStrong(request.password())) {
+        if (!securityService.isPasswordStrong(request.getPassword())) {
             throw new ValidationException(
                 "Password must be at least 8 characters and include uppercase, lowercase, number, and special character"
             );
@@ -59,24 +59,22 @@ public class AuthService {
         }
 
         // Check if email is taken (if provided)
-        if (request.email() != null && !request.email().isBlank()) {
-            if (userRepository.findByEmailIgnoreCase(request.email()).isPresent()) {
+        if (request.getEmail() != null && !request.getEmail().isBlank()) {
+            if (userRepository.findByEmailIgnoreCase(request.getEmail()).isPresent()) {
                 throw new ConflictException("Email already registered");
             }
         }
 
         // Default role is USER
-        String role = request.role() != null && !request.role().isBlank() ? request.role() : "USER";
+        String role = request.getRole() != null && !request.getRole().isBlank() ? request.getRole() : ROLE.USER;
 
-        User user = User.builder()
-            .username(normalizedUsername)
-            .email(request.email())
-            .passwordHash(securityService.hashPassword(request.password()))
-            .role(role)
-            .provider("local")
-            .isActive(true)
-            .build();
-
+        User user = new User();
+        user.setUsername(normalizedUsername);
+        user.setEmail(request.getEmail());
+        user.setPasswordHash(securityService.hashPassword(request.getPassword()));
+        user.setRole(role);
+        user.setProvider("local");
+        user.setIsActive(true);
         user = userRepository.save(user);
         log.info("User registered: username={}, role={}", normalizedUsername, role);
 
@@ -152,35 +150,35 @@ public class AuthService {
         TokenPayload payload = securityService.verifyToken(refreshToken);
 
         // Check token type
-        if (!"refresh".equals(payload.typ())) {
+        if (!"refresh".equals(payload.getTyp())) {
             throw new UnauthorizedException("Not a refresh token");
         }
 
-        if (payload.sid() == null) {
+        if (payload.getSid() == null) {
             throw new UnauthorizedException("Malformed refresh token");
         }
 
         // Get the session
-        Map<Object, Object> session = sessionService.getSession(payload.sid());
+        Map<Object, Object> session = sessionService.getSession(payload.getSid());
         if (session == null || session.isEmpty()) {
             throw new UnauthorizedException("Session expired or revoked");
         }
 
         // Check for refresh token reuse (reuse detection)
         Object currentJti = session.get("current_refresh_jti");
-        if (currentJti == null || !currentJti.toString().equals(payload.jti())) {
+        if (currentJti == null || !currentJti.toString().equals(payload.getJti())) {
             // Token was already rotated away - possible theft
-            sessionService.destroySession(payload.sid());
-            log.warn("Refresh token reuse detected: sid={}, user_id={}", payload.sid(), payload.sub());
+            sessionService.destroySession(payload.getSid());
+            log.warn("Refresh token reuse detected: sid={}, user_id={}", payload.getSid(), payload.getSub());
             throw new UnauthorizedException("Refresh token reuse detected; session revoked");
         }
 
         // Get the user and verify they're still active
-        User user = userRepository.findById(UUID.fromString(payload.sub()))
+        User user = userRepository.findById(UUID.fromString(payload.getSub()))
             .orElseThrow(() -> new UnauthorizedException("User not found"));
 
         if (!user.getIsActive()) {
-            sessionService.destroySession(payload.sid());
+            sessionService.destroySession(payload.getSid());
             throw new UnauthorizedException("User no longer active");
         }
 
@@ -190,20 +188,20 @@ public class AuthService {
             user.getEmail(),
             user.getUsername(),
             user.getRole(),
-            payload.sid()
+            payload.getSid()
         );
         String accessToken = accessTokenPair[0];
 
         // Create new refresh token
         String[] refreshTokenPair = securityService.createRefreshToken(
             user.getId().toString(),
-            payload.sid()
+            payload.getSid()
         );
         String newRefreshToken = refreshTokenPair[0];
         String newJti = refreshTokenPair[1];
 
         // Rotate the refresh token in Redis
-        sessionService.rotateRefreshToken(payload.sid(), payload.jti(), newJti);
+        sessionService.rotateRefreshToken(payload.getSid(), payload.getJti(), newJti);
 
         int accessTokenExpiry = authProperties.getAccessTokenExpireMinutes() * 60;
 
@@ -220,11 +218,11 @@ public class AuthService {
      */
     @Transactional
     public void logout(TokenPayload tokenPayload) {
-        long remainingSeconds = tokenPayload.exp() - (System.currentTimeMillis() / 1000);
-        sessionService.denylistAccessJti(tokenPayload.jti(), remainingSeconds);
+        long remainingSeconds = tokenPayload.getExp() - (System.currentTimeMillis() / 1000);
+        sessionService.denylistAccessJti(tokenPayload.getJti(), remainingSeconds);
 
-        if (tokenPayload.sid() != null) {
-            sessionService.destroySession(tokenPayload.sid());
+        if (tokenPayload.getSid() != null) {
+            sessionService.destroySession(tokenPayload.getSid());
         }
     }
 
@@ -233,10 +231,10 @@ public class AuthService {
      */
     @Transactional
     public long logoutAll(TokenPayload tokenPayload) {
-        long remainingSeconds = tokenPayload.exp() - (System.currentTimeMillis() / 1000);
-        sessionService.denylistAccessJti(tokenPayload.jti(), remainingSeconds);
+        long remainingSeconds = tokenPayload.getExp() - (System.currentTimeMillis() / 1000);
+        sessionService.denylistAccessJti(tokenPayload.getJti(), remainingSeconds);
 
-        return sessionService.destroyAllSessions(tokenPayload.sub());
+        return sessionService.destroyAllSessions(tokenPayload.getSub());
     }
 
     /**
@@ -244,8 +242,8 @@ public class AuthService {
      */
     @Transactional
     public UserResponse ssoLogin(SSOLoginRequest request) {
-        String provider = request.provider().toLowerCase().trim();
-        String subject = request.subject().trim();
+        String provider = request.getProvider().toLowerCase().trim();
+        String subject = request.getSubject().trim();
 
         if (subject.isBlank()) {
             throw new ValidationException("SSO subject is required");
@@ -263,28 +261,29 @@ public class AuthService {
         }
 
         // Create new user
-        String displayName = request.displayName() != null ? request.displayName() : "";
+        String displayName = request.getDisplayName() != null ? request.getDisplayName() : "";
         String baseUsername = displayName.replaceAll("\\s+", "").toLowerCase();
         if (baseUsername.isBlank()) {
-            baseUsername = request.email() != null ? request.email().split("@")[0] : provider + "-" + subject;
+            baseUsername = request.getEmail() != null ? request.getEmail().split("@")[0] : provider + "-" + subject;
         }
         baseUsername = baseUsername.substring(0, Math.min(40, baseUsername.length()));
         if (baseUsername.isBlank()) {
-            baseUsername = "user";
+            baseUsername = ROLE.USER;
         }
 
         // Find a unique username
         String username = findUniqueUsername(baseUsername);
 
-        User newUser = User.builder()
-            .username(username)
-            .email(request.email())
-            .passwordHash(null) // No password for SSO
-            .role("USER")
-            .provider(provider)
-            .providerSub(subject)
-            .isActive(true)
-            .build();
+        User newUser = new User();
+        newUser.setUsername(username);
+        newUser.setEmail(request.getEmail());
+        newUser.setPasswordHash(null);
+        newUser.setRole(ROLE.USER);
+        newUser.setProvider(provider);
+        newUser.setProviderSub(subject);
+        newUser.setIsActive(true);
+
+        log.info("User registered: username={}, role={}", username, ROLE.USER);
 
         newUser = userRepository.save(newUser);
         log.info("SSO user created: username={}, provider={}", username, provider);
@@ -308,7 +307,7 @@ public class AuthService {
         TokenPayload payload = securityService.verifyToken(token);
 
         // Check if token is denylisted
-        if (sessionService.isAccessJtiDenylisted(payload.jti())) {
+        if (sessionService.isAccessJtiDenylisted(payload.getJti())) {
             throw new UnauthorizedException("Token has been revoked");
         }
 

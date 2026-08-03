@@ -1,7 +1,6 @@
 package com.ecom.auth.service;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -12,14 +11,11 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 @Service
+@RequiredArgsConstructor
 public class SessionService {
-    private final RedisTemplate<String, Object> redisTemplate;
-    private final int refreshTokenTtlSeconds;
 
-    public SessionService(RedisTemplate<String, Object> redisTemplate) {
-        this.redisTemplate = redisTemplate;
-        this.refreshTokenTtlSeconds = 7 * 86400; // 7 days
-    }
+    private final RedisTemplate<String, Object> redisTemplate;
+    private final int refreshTokenTtlSeconds = 7 * 86400;
 
     /**
      * Create a new session with the given session ID and refresh token JTI.
@@ -31,10 +27,7 @@ public class SessionService {
         sessionData.put("user_agent", userAgent != null ? userAgent.substring(0, Math.min(300, userAgent.length())) : "");
         sessionData.put("current_refresh_jti", refreshJti);
 
-        redisTemplate.opsForHash().putAll(
-            "session:" + sid,
-            sessionData
-        );
+        redisTemplate.opsForHash().putAll("session:" + sid, sessionData);
         redisTemplate.expire("session:" + sid, refreshTokenTtlSeconds, TimeUnit.SECONDS);
         redisTemplate.opsForValue().set("refresh:" + refreshJti, sid, refreshTokenTtlSeconds, TimeUnit.SECONDS);
         redisTemplate.opsForSet().add("user_sessions:" + userId, sid);
@@ -70,7 +63,7 @@ public class SessionService {
             }
             Object userId = session.get("user_id");
             if (userId != null) {
-                redisTemplate.opsForSet().remove("user_sessions:" + userId.toString(), sid);
+                redisTemplate.opsForSet().remove("user_sessions:" + userId, sid);
             }
         }
         redisTemplate.delete("session:" + sid);

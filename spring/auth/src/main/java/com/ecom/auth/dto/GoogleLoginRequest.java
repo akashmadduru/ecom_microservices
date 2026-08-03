@@ -1,9 +1,16 @@
 package com.ecom.auth.dto;
 
 import jakarta.validation.constraints.NotBlank;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
-public record GoogleLoginRequest(
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class GoogleLoginRequest {
     @NotBlank(message = "Token is required")
-    String token
-) {
+    private String token;
 }

@@ -1,21 +1,17 @@
 package com.ecom.inventory.repository;
 
-import com.ecom.inventory.domain.SagaReservation;
+import com.ecom.inventory.entity.Reservation;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
 
 @Repository
-public interface ReservationRepository extends JpaRepository<SagaReservation, UUID> {
+public interface ReservationRepository extends JpaRepository<Reservation, Long> {
 
-    List<SagaReservation> findBySagaId(UUID sagaId);
+    List<Reservation> findByProductId(Long productId);
 
-    List<SagaReservation> findByProductId(Long productId);
+    List<Reservation> findByUserIdAndIsReleasedFalse(String userId);
 
-    List<SagaReservation> findByStatus(SagaReservation.ReservationStatus status);
-
-    Optional<SagaReservation> findByReservationId(UUID reservationId);
+    List<Reservation> findByProductIdAndIsReleasedFalse(Long productId);
 }

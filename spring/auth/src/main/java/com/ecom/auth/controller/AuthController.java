@@ -1,25 +1,25 @@
 package com.ecom.auth.controller;
 
+import com.ecom.auth.domain.User;
 import com.ecom.auth.dto.*;
+import com.ecom.auth.exception.UnauthorizedException;
 import com.ecom.auth.service.AuthService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.view.RedirectView;
 
-import java.util.HashMap;
 import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1/auth")
+@RequiredArgsConstructor
 public class AuthController {
-    private final AuthService authService;
 
-    public AuthController(AuthService authService) {
-        this.authService = authService;
-    }
+    private final AuthService authService;
 
     @PostMapping("/signup")
     public ResponseEntity<UserResponse> signup(@Valid @RequestBody UserSignupRequest request) {
@@ -31,7 +31,7 @@ public class AuthController {
     public ResponseEntity<TokenPairResponse> signin(
         @Valid @RequestBody SigninRequest request,
         HttpServletRequest httpRequest) {
-        UserResponse user = authService.authenticate(request.username(), request.password());
+        UserResponse user = authService.authenticate(request.getUsername(), request.getPassword());
         TokenPairResponse tokens = authService.issuePair(
             convertToUserEntity(user),
             httpRequest.getHeader("User-Agent")
@@ -41,7 +41,7 @@ public class AuthController {
 
     @PostMapping("/token/refresh")
     public ResponseEntity<TokenPairResponse> refreshTokens(@Valid @RequestBody RefreshTokenRequest request) {
-        TokenPairResponse tokens = authService.refreshTokens(request.refreshToken());
+        TokenPairResponse tokens = authService.refreshTokens(request.getRefreshToken());
         return ResponseEntity.ok(tokens);
     }
 
@@ -65,7 +65,7 @@ public class AuthController {
     public ResponseEntity<TokenPairResponse> ssoGoogleLogin(
         @Valid @RequestBody GoogleLoginRequest request,
         HttpServletRequest httpRequest) {
-        UserResponse user = authService.ssoGoogleLogin(request.token());
+        UserResponse user = authService.ssoGoogleLogin(request.getToken());
         TokenPairResponse tokens = authService.issuePair(
             convertToUserEntity(user),
             httpRequest.getHeader("User-Agent")
@@ -108,7 +108,7 @@ public class AuthController {
     public ResponseEntity<UserResponse> validateToken(@RequestHeader("Authorization") String authHeader) {
         String token = extractToken(authHeader);
         TokenPayload payload = authService.validateToken(token);
-        UserResponse user = authService.getUser(payload.sub());
+        UserResponse user = authService.getUser(payload.getSub());
         return ResponseEntity.ok(user);
     }
 
@@ -116,7 +116,7 @@ public class AuthController {
     public ResponseEntity<UserResponse> getCurrentUser(@RequestHeader("Authorization") String authHeader) {
         String token = extractToken(authHeader);
         TokenPayload payload = authService.validateToken(token);
-        UserResponse user = authService.getUser(payload.sub());
+        UserResponse user = authService.getUser(payload.getSub());
         return ResponseEntity.ok(user);
     }
 
@@ -128,19 +128,19 @@ public class AuthController {
 
     private String extractToken(String authHeader) {
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            throw new com.ecom.auth.exception.UnauthorizedException("Missing or invalid Authorization header");
+            throw new UnauthorizedException("Missing or invalid Authorization header");
         }
         return authHeader.substring(7);
     }
 
-    private com.ecom.auth.domain.User convertToUserEntity(UserResponse userResponse) {
-        return com.ecom.auth.domain.User.builder()
-            .id(userResponse.id())
-            .username(userResponse.username())
-            .email(userResponse.email())
-            .role(userResponse.role())
-            .provider(userResponse.provider())
-            .isActive(userResponse.isActive())
-            .build();
+    private User convertToUserEntity(UserResponse userResponse) {
+        User user = new User();
+        user.setId(userResponse.getId());
+        user.setUsername(userResponse.getUsername());
+        user.setEmail(userResponse.getEmail());
+        user.setRole(userResponse.getRole());
+        user.setProvider(userResponse.getProvider());
+        user.setIsActive(userResponse.getIsActive());
+        return user;
     }
 }

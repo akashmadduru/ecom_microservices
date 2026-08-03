@@ -26,7 +26,30 @@ spring:
         binder:
           brokers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
       bindings:
-        # Consumers for cart events
+        # Inventory service saga event bindings
+        checkoutInitiatedEventConsumer-in-0:
+          destination: checkout-initiated
+          group: inventory-reservation-saga
+          consumer:
+            startOffset: latest
+        inventoryReservedEventProducer-out-0:
+          destination: inventory-reserved
+          producer:
+            partition-key-expression: headers['sagaId']
+        inventoryReservationFailedEventProducer-out-0:
+          destination: inventory-failed
+          producer:
+            partition-key-expression: headers['sagaId']
+        compensationTriggeredEventConsumer-in-0:
+          destination: compensation-triggered
+          group: inventory-compensation-saga
+          consumer:
+            startOffset: latest
+        checkoutCompensatedEventProducer-out-0:
+          destination: compensation-completed
+          producer:
+            partition-key-expression: headers['sagaId']
+        # Original inventory events
         cartEventConsumer-in-0:
           destination: cart-events
           group: inventory-service

@@ -1,12 +1,16 @@
 package com.ecom.auth.dto;
 
 import jakarta.validation.constraints.NotBlank;
+import lombok.*;
 
-public record SigninRequest(
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class SigninRequest {
     @NotBlank(message = "Username is required")
-    String username,
+    private String username;
 
     @NotBlank(message = "Password is required")
-    String password
-) {
+    private String password;
 }

@@ -5,7 +5,6 @@ import com.ecom.cart.dto.CartResponse;
 import com.ecom.cart.entity.Cart;
 import com.ecom.cart.entity.CartItem;
 import com.ecom.cart.event.AddedToCartEvent;
-import com.ecom.cart.event.CheckoutInitiatedEvent;
 import com.ecom.cart.event.RemovedFromCartEvent;
 import com.ecom.cart.exception.CartNotFoundException;
 import com.ecom.cart.exception.InvalidCartItemException;
@@ -147,19 +146,6 @@ public class CartService {
 		if (cart.getItems().isEmpty()) {
 			throw new InvalidCartItemException("Cannot checkout with empty cart");
 		}
-
-		BigDecimal totalAmount = CartResponse.fromEntity(cart).calculateTotal();
-
-		// Publish CheckoutInitiatedEvent
-		CheckoutInitiatedEvent event = CheckoutInitiatedEvent.builder()
-				.cartId(cart.getId())
-				.userId(userId)
-				.totalAmount(totalAmount)
-				.timestamp(LocalDateTime.now())
-				.build();
-
-		streamBridge.send("cartEventProducer-out-0",
-				MessageBuilder.withPayload(event).build());
 
 		return CartResponse.fromEntity(cart);
 	}

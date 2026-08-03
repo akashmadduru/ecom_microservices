@@ -29,7 +29,7 @@ public class Inventory {
 	@Column(nullable = false)
 	private Integer reservedStock;
 
-	@Column(name = "last_updated")
+	@Column()
 	private LocalDateTime lastUpdated;
 
 	@PrePersist
